@@ -203,8 +203,12 @@ export default function DiligenciarEncuesta() {
           </Select>
         )}
 
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {preguntas.map((p, idx) => (
-          <div key={p.id} className="neu-flat p-4">
+          <div
+            key={p.id}
+            className={`neu-flat p-4 ${p.tipo_respuesta === 'texto_libre' ? 'lg:col-span-2' : ''}`}
+          >
             <label className="mb-3 flex items-start gap-3 text-sm font-medium text-slate-700">
               <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--azul)] text-xs font-semibold text-white">
                 {idx + 1}
@@ -303,6 +307,7 @@ export default function DiligenciarEncuesta() {
             )}
           </div>
         ))}
+        </div>
 
         {errorMsg && <p className="text-sm text-rose-600">{errorMsg}</p>}
         <Boton onClick={enviar} disabled={enviando}>

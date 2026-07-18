@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
+import { ESCALA_4_COLOR, ESCALA_1_5_COLOR } from '../lib/constantes'
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`neu-flat p-5 ${className}`}>{children}</div>
@@ -102,33 +103,52 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={`neu-input w-full px-3 py-2 text-sm ${props.className ?? ''}`} />
 }
 
-export type DetalleQA = { pregunta: string; valor: string }
+export type DetalleQA = { pregunta: string; valor: string; tipoRespuesta?: string }
 export type PopoverQA = { x: number; y: number; titulo: string; filas: DetalleQA[]; cargando: boolean } | null
+
+function colorDeValor(tipoRespuesta: string | undefined, valor: string): string | undefined {
+  if (tipoRespuesta === 'escala_4') return ESCALA_4_COLOR[valor]
+  if (tipoRespuesta === 'escala_1_5') return ESCALA_1_5_COLOR[valor]
+  if (tipoRespuesta === 'si_no') return valor === 'SI' ? '#22c55e' : '#ef4444'
+  return undefined
+}
 
 export function PopoverRespuestas({ popover, onClose }: { popover: PopoverQA; onClose: () => void }) {
   if (!popover) return null
   return (
     <div className="fixed inset-0 z-40" onClick={onClose}>
       <div
-        className="neu-flat fixed z-50 w-80 p-3"
+        className="neu-flat fixed z-50 w-80 overflow-hidden p-0"
         style={{ left: popover.x, top: popover.y }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-300/50 pb-2">
-          <span className="text-xs font-bold text-[var(--azul)]">{popover.titulo}</span>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+        <div className="flex items-center justify-between gap-2 bg-[var(--azul)] px-3 py-2">
+          <span className="text-xs font-bold text-white">{popover.titulo}</span>
+          <button onClick={onClose} className="text-white/70 hover:text-white">
             ✕
           </button>
         </div>
-        <div className="max-h-72 overflow-y-auto">
+        <div className="max-h-72 overflow-y-auto p-3">
           {popover.cargando && <p className="py-2 text-center text-xs text-slate-400">Cargando…</p>}
           {!popover.cargando &&
-            popover.filas.map((d, i) => (
-              <div key={i} className="border-b border-slate-300/30 py-1.5 text-[11px]">
-                <div className="text-slate-500">{d.pregunta}</div>
-                <div className="font-medium text-slate-700">{d.valor}</div>
-              </div>
-            ))}
+            popover.filas.map((d, i) => {
+              const color = colorDeValor(d.tipoRespuesta, d.valor)
+              return (
+                <div key={i} className="neu-pressed mb-2 p-2 text-[11px] last:mb-0">
+                  <div className="mb-1 font-medium text-slate-600">{d.pregunta}</div>
+                  {color ? (
+                    <span
+                      className="inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                      style={{ background: color }}
+                    >
+                      {d.valor}
+                    </span>
+                  ) : (
+                    <div className="font-medium text-slate-800">{d.valor}</div>
+                  )}
+                </div>
+              )
+            })}
           {!popover.cargando && popover.filas.length === 0 && (
             <p className="py-2 text-center text-xs text-slate-400">Sin respuestas registradas.</p>
           )}

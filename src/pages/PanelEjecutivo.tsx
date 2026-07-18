@@ -73,35 +73,26 @@ function PopoverDetalle({ popover, onClose }: { popover: PopoverState; onClose: 
   return (
     <div className="fixed inset-0 z-40" onClick={onClose}>
       <div
-        className="neu-flat fixed z-50 w-80 p-3"
+        className="neu-flat fixed z-50 w-80 overflow-hidden p-0"
         style={{ left: popover.x, top: popover.y }}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-300/50 pb-2">
-          <span className="text-xs font-bold text-[var(--azul)]">{popover.titulo}</span>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+        <div className="flex items-center justify-between gap-2 bg-[var(--azul)] px-3 py-2">
+          <span className="text-xs font-bold text-white">{popover.titulo}</span>
+          <button onClick={onClose} className="text-white/70 hover:text-white">
             ✕
           </button>
         </div>
-        <div className="max-h-64 overflow-y-auto">
-          <table className="w-full text-[11px]">
-            <thead>
-              <tr className="text-left text-slate-400">
-                <th className="pb-1 pr-2 font-medium">Fecha</th>
-                <th className="pb-1 pr-2 font-medium">Área</th>
-                <th className="pb-1 pr-2 font-medium">Pregunta</th>
-              </tr>
-            </thead>
-            <tbody>
-              {popover.filas.map((f, i) => (
-                <tr key={i} className="border-t border-slate-300/40">
-                  <td className="py-1 pr-2 align-top">{f.fecha_respuesta}</td>
-                  <td className="py-1 pr-2 align-top">{f.area_nombre ?? '—'}</td>
-                  <td className="py-1 pr-2 align-top text-slate-700">{f.pregunta_texto}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="max-h-64 overflow-y-auto p-3">
+          {popover.filas.map((f, i) => (
+            <div key={i} className="neu-pressed mb-2 p-2 text-[11px] last:mb-0">
+              <div className="mb-1 flex justify-between text-slate-500">
+                <span>{f.fecha_respuesta}</span>
+                <span>{f.area_nombre ?? '—'}</span>
+              </div>
+              <div className="font-medium text-slate-800">{f.pregunta_texto}</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
