@@ -1,0 +1,198 @@
+import { useEffect, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { listarAreas } from '../../lib/data'
+import { PageHeader, Card, Boton, Input, Select, Modal } from '../../components/ui'
+import { ROL_LABEL } from '../../lib/constantes'
+import type { Database } from '../../lib/database.types'
+
+type Profile = Database['public']['Tables']['profiles']['Row']
+type Area = Database['public']['Tables']['areas_servicio']['Row']
+
+const ROLES: Profile['role'][] = ['administrador', 'coordinador_administrativo', 'encuestado', 'orientador']
+
+export default function Usuarios() {
+  const [usuarios, setUsuarios] = useState<Profile[]>([])
+  const [areas, setAreas] = useState<Area[]>([])
+  const [modalAbierto, setModalAbierto] = useState(false)
+  const [editando, setEditando] = useState<Profile | null>(null)
+  const [form, setForm] = useState({
+    email: '',
+    password: '',
+    nombre: '',
+    role: 'encuestado' as Profile['role'],
+    area_servicio_id: '' as number | '',
+  })
+  const [error, setError] = useState<string | null>(null)
+  const [guardando, setGuardando] = useState(false)
+
+  async function cargar() {
+    const { data } = await supabase.from('profiles').select('*').order('nombre')
+    setUsuarios(data ?? [])
+  }
+  useEffect(() => {
+    cargar()
+    listarAreas().then(setAreas)
+  }, [])
+
+  function abrirNuevo() {
+    setEditando(null)
+    setForm({ email: '', password: '', nombre: '', role: 'encuestado', area_servicio_id: '' })
+    setError(null)
+    setModalAbierto(true)
+  }
+
+  function abrirEditar(u: Profile) {
+    setEditando(u)
+    setForm({
+      email: u.email,
+      password: '',
+      nombre: u.nombre,
+      role: u.role as Profile['role'],
+      area_servicio_id: u.area_servicio_id ?? '',
+    })
+    setError(null)
+    setModalAbierto(true)
+  }
+
+  async function guardar() {
+    setError(null)
+    setGuardando(true)
+    try {
+      if (editando) {
+        const { error: err } = await supabase.functions.invoke('admin-usuarios', {
+          body: {
+            accion: 'actualizar',
+            id: editando.id,
+            nombre: form.nombre,
+            role: form.role,
+            area_servicio_id: form.area_servicio_id || null,
+            activo: editando.activo,
+          },
+        })
+        if (err) throw err
+        if (form.password) {
+          const { error: errPw } = await supabase.functions.invoke('admin-usuarios', {
+            body: { accion: 'reset', id: editando.id, password: form.password },
+          })
+          if (errPw) throw errPw
+        }
+      } else {
+        const { error: err, data } = await supabase.functions.invoke('admin-usuarios', {
+          body: {
+            accion: 'crear',
+            email: form.email,
+            password: form.password,
+            nombre: form.nombre,
+            role: form.role,
+            area_servicio_id: form.area_servicio_id || null,
+          },
+        })
+        if (err) throw err
+        if (data?.error) throw new Error(data.error)
+      }
+      setModalAbierto(false)
+      cargar()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo guardar')
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  async function alternarActivo(u: Profile) {
+    await supabase.functions.invoke('admin-usuarios', {
+      body: { accion: 'actualizar', id: u.id, nombre: u.nombre, role: u.role, area_servicio_id: u.area_servicio_id, activo: !u.activo },
+    })
+    cargar()
+  }
+
+  async function eliminar(u: Profile) {
+    if (!confirm(`¿Eliminar a ${u.nombre}? Esta acción no se puede deshacer.`)) return
+    await supabase.functions.invoke('admin-usuarios', { body: { accion: 'eliminar', id: u.id } })
+    cargar()
+  }
+
+  return (
+    <div>
+      <PageHeader titulo="Usuarios" acciones={<Boton onClick={abrirNuevo}>Nuevo usuario</Boton>} />
+      <Card>
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-300 text-xs uppercase text-slate-500">
+              <th className="py-2">Nombre</th>
+              <th>Correo</th>
+              <th>Rol</th>
+              <th>Área</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {usuarios.map((u) => (
+              <tr key={u.id} className="border-b border-slate-200">
+                <td className="py-2">{u.nombre}</td>
+                <td>{u.email}</td>
+                <td>{ROL_LABEL[u.role]}</td>
+                <td>{areas.find((a) => a.id === u.area_servicio_id)?.nombre ?? '—'}</td>
+                <td>
+                  <button onClick={() => alternarActivo(u)} className={u.activo ? 'text-emerald-700' : 'text-slate-400'}>
+                    {u.activo ? 'Activo' : 'Inactivo'}
+                  </button>
+                </td>
+                <td className="flex gap-3 py-2 text-xs">
+                  <button onClick={() => abrirEditar(u)} className="text-[var(--azul-2)] hover:underline">
+                    Editar
+                  </button>
+                  <button onClick={() => eliminar(u)} className="text-rose-600 hover:underline">
+                    Eliminar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </Card>
+
+      <Modal open={modalAbierto} onClose={() => setModalAbierto(false)} titulo={editando ? 'Editar usuario' : 'Nuevo usuario'}>
+        <div className="flex flex-col gap-3">
+          <Input placeholder="Nombre completo" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+          <Input
+            type="email"
+            placeholder="Correo institucional"
+            value={form.email}
+            disabled={!!editando}
+            onChange={(e) => setForm({ ...form, email: e.target.value })}
+          />
+          <Input
+            type="password"
+            placeholder={editando ? 'Nueva contraseña (opcional)' : 'Contraseña'}
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+          <Select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Profile['role'] })}>
+            {ROLES.map((r) => (
+              <option key={r} value={r}>
+                {ROL_LABEL[r]}
+              </option>
+            ))}
+          </Select>
+          <Select
+            value={form.area_servicio_id}
+            onChange={(e) => setForm({ ...form, area_servicio_id: e.target.value ? Number(e.target.value) : '' })}
+          >
+            <option value="">Área / servicio (opcional)</option>
+            {areas.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.nombre}
+              </option>
+            ))}
+          </Select>
+          {error && <p className="text-sm text-rose-600">{error}</p>}
+          <Boton onClick={guardar} disabled={guardando}>
+            {guardando ? 'Guardando…' : 'Guardar'}
+          </Boton>
+        </div>
+      </Modal>
+    </div>
+  )
+}

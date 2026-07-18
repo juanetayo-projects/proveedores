@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@theme {
+  --color-azul: #0d2d6b;
+  --color-azul2: #16468e;
+  --color-neu-bg: #e8edf7;
+}
+
+:root {
+  --azul: #0d2d6b;
+  --azul-2: #16468e;
+  --neu-bg: #e8edf7;
+  --neu-shadow-dark: #c3cbe0;
+  --neu-shadow-light: #ffffff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--neu-bg);
+  color: #1f2937;
+  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* --- Neumorfismo: base plana extruida sobre el mismo fondo --- */
+.neu-flat {
+  background: var(--neu-bg);
+  border-radius: 1.25rem;
+  box-shadow:
+    8px 8px 16px var(--neu-shadow-dark),
+    -8px -8px 16px var(--neu-shadow-light);
+}
+
+/* --- Presionado / hundido (inputs, estado activo) --- */
+.neu-pressed {
+  background: var(--neu-bg);
+  border-radius: 1rem;
+  box-shadow:
+    inset 4px 4px 8px var(--neu-shadow-dark),
+    inset -4px -4px 8px var(--neu-shadow-light);
+}
+
+/* --- Convexo con degradado institucional (botones primarios, métricas) --- */
+.neu-convex {
+  background: linear-gradient(145deg, var(--azul-2), var(--azul));
+  border-radius: 1rem;
+  box-shadow:
+    6px 6px 14px var(--neu-shadow-dark),
+    -6px -6px 14px var(--neu-shadow-light);
+}
+
+.neu-btn {
+  background: var(--neu-bg);
+  border-radius: 0.9rem;
+  box-shadow:
+    5px 5px 10px var(--neu-shadow-dark),
+    -5px -5px 10px var(--neu-shadow-light);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.neu-btn:active {
+  box-shadow:
+    inset 3px 3px 6px var(--neu-shadow-dark),
+    inset -3px -3px 6px var(--neu-shadow-light);
+  transform: scale(0.99);
+}
+
+.neu-input {
+  background: var(--neu-bg);
+  border-radius: 0.75rem;
+  box-shadow:
+    inset 3px 3px 6px var(--neu-shadow-dark),
+    inset -3px -3px 6px var(--neu-shadow-light);
+  border: none;
+  outline: none;
+}
+.neu-input:focus {
+  box-shadow:
+    inset 3px 3px 6px var(--neu-shadow-dark),
+    inset -3px -3px 6px var(--neu-shadow-light),
+    0 0 0 2px var(--azul-2);
+}
