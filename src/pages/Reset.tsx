@@ -18,11 +18,9 @@ export default function Reset() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--neu-bg)] p-4">
-      <form onSubmit={guardar} className="neu-flat flex w-full max-w-md flex-col gap-3 p-6">
-        <h1 className="mb-2 text-center text-lg font-semibold text-[var(--azul)]">
-          Nueva contraseña
-        </h1>
+    <div className="login-page flex items-center justify-center p-4">
+      <form onSubmit={guardar} className="login-card flex w-full max-w-md flex-col gap-3 p-8">
+        <h1 className="mb-2 text-center text-lg font-semibold text-white">Nueva contraseña</h1>
         <input
           type="password"
           required
@@ -30,10 +28,10 @@ export default function Reset() {
           placeholder="Nueva contraseña"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="neu-input px-3 py-2 text-sm"
+          className="login-input px-3 py-2 text-sm"
         />
-        {msg && <p className="text-sm text-[var(--azul)]">{msg}</p>}
-        <button type="submit" className="neu-convex py-2 text-sm font-medium text-white">
+        {msg && <p className="text-sm text-blue-100">{msg}</p>}
+        <button type="submit" className="login-btn py-2 text-sm font-medium text-white">
           Guardar
         </button>
       </form>

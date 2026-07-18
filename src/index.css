@@ -82,3 +82,55 @@ body {
     inset -3px -3px 6px var(--neu-shadow-light),
     0 0 0 2px var(--azul-2);
 }
+
+/* --- Login: fondo azul oscuro + tarjeta azul claro neumórfica con brillo --- */
+.login-page {
+  min-height: 100vh;
+  background: radial-gradient(circle at 30% 0%, #12245a 0%, #060d24 65%);
+}
+
+.login-card {
+  --login-card: #22448f;
+  --login-shadow-dark: rgba(2, 6, 20, 0.65);
+  --login-shadow-light: rgba(112, 155, 235, 0.45);
+  background: linear-gradient(160deg, #2a52a4, #1c3d80);
+  border-radius: 1.5rem;
+  box-shadow:
+    10px 10px 22px var(--login-shadow-dark),
+    -8px -8px 20px var(--login-shadow-light),
+    inset 0 1px 0 rgba(255, 255, 255, 0.25),
+    0 0 28px rgba(94, 150, 255, 0.35);
+}
+
+.login-input {
+  background: #1c3d80;
+  border-radius: 0.85rem;
+  border: none;
+  outline: none;
+  color: #fff;
+  box-shadow:
+    inset 4px 4px 8px rgba(2, 6, 20, 0.55),
+    inset -3px -3px 7px rgba(112, 155, 235, 0.35);
+}
+.login-input::placeholder {
+  color: rgba(219, 230, 255, 0.65);
+}
+.login-input:focus {
+  box-shadow:
+    inset 4px 4px 8px rgba(2, 6, 20, 0.55),
+    inset -3px -3px 7px rgba(112, 155, 235, 0.35),
+    0 0 0 2px rgba(140, 185, 255, 0.8);
+}
+
+.login-btn {
+  background: linear-gradient(145deg, #4a7fd6, #2a52a4);
+  border-radius: 0.9rem;
+  box-shadow:
+    6px 6px 14px rgba(2, 6, 20, 0.55),
+    -4px -4px 12px rgba(112, 155, 235, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+.login-btn:active {
+  transform: scale(0.99);
+}
