@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { listarEncuestas } from '../lib/data'
-import { PageHeader, Card, FilterBar, Select, Input, Boton } from '../components/ui'
+import { listarEncuestas, listarDetalleRespuesta } from '../lib/data'
+import { PageHeader, Card, FilterBar, Select, Input, Boton, PopoverRespuestas, calcularPosicionPopover, type PopoverQA } from '../components/ui'
 import type { Database } from '../lib/database.types'
 
 type Encuesta = Database['public']['Tables']['encuestas']['Row']
@@ -16,9 +16,6 @@ type Fila = {
   paciente_numero_habitacion: string | null
 }
 
-type DetalleFila = { pregunta: string; valor: string }
-type PopoverState = { x: number; y: number; titulo: string; filas: DetalleFila[]; cargando: boolean } | null
-
 export default function Reportes() {
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [encuestaId, setEncuestaId] = useState<number | ''>('')
@@ -26,7 +23,7 @@ export default function Reportes() {
   const [hasta, setHasta] = useState('')
   const [filas, setFilas] = useState<Fila[]>([])
   const [cargando, setCargando] = useState(false)
-  const [popover, setPopover] = useState<PopoverState>(null)
+  const [popover, setPopover] = useState<PopoverQA>(null)
 
   useEffect(() => {
     listarEncuestas().then((es) => {
@@ -73,21 +70,9 @@ export default function Reportes() {
 
   async function verRespuestas(f: Fila, e: { clientX: number; clientY: number }) {
     const titulo = f.paciente_nombre ?? f.area_servicio_nombre ?? `Respuesta ${f.id}`
-    const x = Math.max(8, Math.min(e.clientX, window.innerWidth - 340))
-    const y = Math.max(8, Math.min(e.clientY, window.innerHeight - 320))
+    const { x, y } = calcularPosicionPopover(e)
     setPopover({ x, y, titulo, filas: [], cargando: true })
-    const { data } = await supabase
-      .from('respuestas_detalle')
-      .select('valor, preguntas(texto, orden)')
-      .eq('respuesta_id', f.id)
-      .order('pregunta_id')
-    const detalle = (data ?? [])
-      .map((d) => ({
-        pregunta: (d.preguntas as unknown as { texto: string; orden: number } | null)?.texto ?? '',
-        orden: (d.preguntas as unknown as { texto: string; orden: number } | null)?.orden ?? 0,
-        valor: d.valor,
-      }))
-      .sort((a, b) => a.orden - b.orden)
+    const detalle = await listarDetalleRespuesta(f.id)
     setPopover({ x, y, titulo, filas: detalle, cargando: false })
   }
 
@@ -195,35 +180,7 @@ export default function Reportes() {
         </div>
       </Card>
 
-      {popover && (
-        <div className="fixed inset-0 z-40" onClick={() => setPopover(null)}>
-          <div
-            className="neu-flat fixed z-50 w-80 p-3"
-            style={{ left: popover.x, top: popover.y }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-300/50 pb-2">
-              <span className="text-xs font-bold text-[var(--azul)]">{popover.titulo}</span>
-              <button onClick={() => setPopover(null)} className="text-slate-400 hover:text-slate-600">
-                ✕
-              </button>
-            </div>
-            <div className="max-h-72 overflow-y-auto">
-              {popover.cargando && <p className="py-2 text-center text-xs text-slate-400">Cargando…</p>}
-              {!popover.cargando &&
-                popover.filas.map((d, i) => (
-                  <div key={i} className="border-b border-slate-300/30 py-1.5 text-[11px]">
-                    <div className="text-slate-500">{d.pregunta}</div>
-                    <div className="font-medium text-slate-700">{d.valor}</div>
-                  </div>
-                ))}
-              {!popover.cargando && popover.filas.length === 0 && (
-                <p className="py-2 text-center text-xs text-slate-400">Sin respuestas registradas.</p>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <PopoverRespuestas popover={popover} onClose={() => setPopover(null)} />
     </div>
   )
 }

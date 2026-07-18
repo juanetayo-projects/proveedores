@@ -102,6 +102,49 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea {...props} className={`neu-input w-full px-3 py-2 text-sm ${props.className ?? ''}`} />
 }
 
+export type DetalleQA = { pregunta: string; valor: string }
+export type PopoverQA = { x: number; y: number; titulo: string; filas: DetalleQA[]; cargando: boolean } | null
+
+export function PopoverRespuestas({ popover, onClose }: { popover: PopoverQA; onClose: () => void }) {
+  if (!popover) return null
+  return (
+    <div className="fixed inset-0 z-40" onClick={onClose}>
+      <div
+        className="neu-flat fixed z-50 w-80 p-3"
+        style={{ left: popover.x, top: popover.y }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-300/50 pb-2">
+          <span className="text-xs font-bold text-[var(--azul)]">{popover.titulo}</span>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            ✕
+          </button>
+        </div>
+        <div className="max-h-72 overflow-y-auto">
+          {popover.cargando && <p className="py-2 text-center text-xs text-slate-400">Cargando…</p>}
+          {!popover.cargando &&
+            popover.filas.map((d, i) => (
+              <div key={i} className="border-b border-slate-300/30 py-1.5 text-[11px]">
+                <div className="text-slate-500">{d.pregunta}</div>
+                <div className="font-medium text-slate-700">{d.valor}</div>
+              </div>
+            ))}
+          {!popover.cargando && popover.filas.length === 0 && (
+            <p className="py-2 text-center text-xs text-slate-400">Sin respuestas registradas.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+export function calcularPosicionPopover(e: { clientX: number; clientY: number }) {
+  return {
+    x: Math.max(8, Math.min(e.clientX, window.innerWidth - 340)),
+    y: Math.max(8, Math.min(e.clientY, window.innerHeight - 320)),
+  }
+}
+
 export function Badge({ children, tono = 'azul' }: { children: ReactNode; tono?: 'azul' | 'verde' | 'ambar' | 'rojo' }) {
   const tonos: Record<string, string> = {
     azul: 'bg-[var(--azul)]/10 text-[var(--azul)]',

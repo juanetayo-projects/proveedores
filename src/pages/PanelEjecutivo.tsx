@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
 import { PageHeader, Card, FilterBar, Select, Input, Boton } from '../components/ui'
@@ -175,6 +175,34 @@ export default function PanelEjecutivo() {
       .slice(0, 10)
   }, [detalle])
 
+  const tendenciaMensual = useMemo(() => {
+    const respuestasUnicas = new Map<number, string>()
+    for (const f of detalle) respuestasUnicas.set(f.respuesta_id, f.fecha_respuesta)
+    const porMes = new Map<string, number>()
+    for (const fecha of respuestasUnicas.values()) {
+      const mes = fecha.slice(0, 7)
+      porMes.set(mes, (porMes.get(mes) ?? 0) + 1)
+    }
+    const porMesSatisfaccion = new Map<string, { positivos: number; total: number }>()
+    for (const f of detalle) {
+      const mes = f.fecha_respuesta.slice(0, 7)
+      const e = porMesSatisfaccion.get(mes) ?? { positivos: 0, total: 0 }
+      e.total += 1
+      if (f.valor === 'Excelente' || f.valor === 'Bueno') e.positivos += 1
+      porMesSatisfaccion.set(mes, e)
+    }
+    return Array.from(porMes.keys())
+      .sort()
+      .map((mes) => {
+        const s = porMesSatisfaccion.get(mes)
+        return {
+          mes,
+          respuestas: porMes.get(mes) ?? 0,
+          satisfaccion: s && s.total > 0 ? Math.round((s.positivos / s.total) * 100) : 0,
+        }
+      })
+  }, [detalle])
+
   const encuestaActual = encuestas.find((e) => e.id === encuestaId)
 
   return (
@@ -212,11 +240,11 @@ export default function PanelEjecutivo() {
           </AnilloSimple>
         </Card>
 
-        <Card className="lg:col-span-2">
+        <Card>
           <h2 className="mb-3 font-semibold text-[var(--azul)]">
-            Distribución de calificaciones — {encuestaActual?.proveedor ?? ''}
+            Distribución — {encuestaActual?.proveedor ?? ''}
           </h2>
-          <div className="flex flex-wrap items-end gap-6">
+          <div className="flex flex-wrap items-end gap-4">
             {distribucion.map((d) => (
               <button
                 key={d.opcion}
@@ -224,18 +252,36 @@ export default function PanelEjecutivo() {
                 className="flex flex-col items-center gap-2"
               >
                 <div
-                  className="w-12 rounded-t-lg"
+                  className="w-9 rounded-t-lg"
                   style={{
-                    height: Math.max(6, (d.filas.length / Math.max(1, total)) * 140),
+                    height: Math.max(6, (d.filas.length / Math.max(1, total)) * 120),
                     background: ESCALA_4_COLOR[d.opcion],
                   }}
                 />
-                <span className="text-xs font-medium text-slate-600">{d.opcion}</span>
+                <span className="text-[11px] font-medium text-slate-600">{d.opcion}</span>
                 <span className="text-xs text-slate-400">{d.filas.length}</span>
               </button>
             ))}
             {total === 0 && <p className="text-sm text-slate-500">Sin respuestas todavía.</p>}
           </div>
+        </Card>
+
+        <Card>
+          <h2 className="mb-3 font-semibold text-[var(--azul)]">Tendencia mensual de satisfacción</h2>
+          {tendenciaMensual.length > 0 ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={tendenciaMensual}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#c3cbe0" />
+                <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={30} />
+                <RTooltip formatter={(v) => `${v}%`} />
+                <Line type="monotone" dataKey="satisfaccion" stroke="#16468e" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-slate-500">Sin datos suficientes para la tendencia.</p>
+          )}
+          <p className="mt-1 text-[10px] text-slate-400">% de respuestas Excelente + Bueno por mes</p>
         </Card>
       </div>
 

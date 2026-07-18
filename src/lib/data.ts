@@ -47,6 +47,23 @@ export async function listarEncuestas() {
   return data ?? []
 }
 
+export async function listarDetalleRespuesta(respuestaId: number) {
+  const { data, error } = await supabase
+    .from('respuestas_detalle')
+    .select('valor, preguntas(texto, orden)')
+    .eq('respuesta_id', respuestaId)
+    .order('pregunta_id')
+  if (error) throw error
+  return (data ?? [])
+    .map((d) => ({
+      pregunta: (d.preguntas as unknown as { texto: string; orden: number } | null)?.texto ?? '',
+      orden: (d.preguntas as unknown as { texto: string; orden: number } | null)?.orden ?? 0,
+      valor: d.valor,
+    }))
+    .sort((a, b) => a.orden - b.orden)
+    .map(({ pregunta, valor }) => ({ pregunta, valor }))
+}
+
 export async function estaEncuestaAbierta(encuesta: {
   siempre_abierta: boolean
   fecha_apertura: string | null

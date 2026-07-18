@@ -24,6 +24,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { perfil } = useAuth()
   const navigate = useNavigate()
   const [adminAbierto, setAdminAbierto] = useState(true)
+  const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false)
 
   const esAdmin = perfil?.role === 'administrador'
   const esCoordOAdmin = perfil?.role === 'administrador' || perfil?.role === 'coordinador_administrativo'
@@ -41,7 +42,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen bg-[var(--neu-bg)]">
       <aside className="neu-flat m-4 flex w-64 shrink-0 flex-col gap-1 rounded-2xl p-4">
-        <div className="mb-4 flex flex-col items-center gap-2">
+        <div className="mb-3 flex flex-col items-center gap-2">
           <img
             src={`${import.meta.env.BASE_URL}images/logo_cacsb2.png`}
             alt="CAC Santa Bárbara"
@@ -50,6 +51,30 @@ export default function Layout({ children }: { children: ReactNode }) {
           <span className="text-center text-xs font-semibold text-[var(--azul)]">
             Encuestas Proveedores
           </span>
+        </div>
+
+        <div className="relative mb-3">
+          <button
+            onClick={() => setMenuUsuarioAbierto((v) => !v)}
+            className="neu-pressed flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs"
+          >
+            <div className="min-w-0">
+              <div className="truncate font-medium text-[var(--azul)]">{perfil?.nombre}</div>
+              <div className="text-slate-500">{perfil ? ROL_LABEL[perfil.role] : ''}</div>
+            </div>
+            <span
+              className={`shrink-0 text-[var(--azul)] transition-transform ${menuUsuarioAbierto ? 'rotate-180' : ''}`}
+            >
+              ▾
+            </span>
+          </button>
+          {menuUsuarioAbierto && (
+            <div className="neu-flat absolute left-0 right-0 top-full z-10 mt-1 p-2">
+              <button onClick={salir} className="neu-btn w-full py-2 text-sm font-medium text-[var(--azul)]">
+                Cerrar sesión
+              </button>
+            </div>
+          )}
         </div>
 
         <Item to="/">Dashboard</Item>
@@ -74,16 +99,6 @@ export default function Layout({ children }: { children: ReactNode }) {
             )}
           </div>
         )}
-
-        <div className="mt-auto flex flex-col gap-2 pt-4">
-          <div className="neu-pressed px-3 py-2 text-xs text-slate-600">
-            <div className="truncate font-medium text-[var(--azul)]">{perfil?.nombre}</div>
-            <div>{perfil ? ROL_LABEL[perfil.role] : ''}</div>
-          </div>
-          <button onClick={salir} className="neu-btn py-2 text-sm font-medium text-[var(--azul)]">
-            Cerrar sesión
-          </button>
-        </div>
       </aside>
 
       <main className="flex-1 overflow-x-auto p-6">{children}</main>
