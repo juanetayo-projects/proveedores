@@ -61,6 +61,12 @@ export default function GestionEncuesta() {
     }
   }
 
+  function cerrarModalNueva() {
+    setModalNueva(false)
+    setErrorNueva(null)
+    setNuevaEncuesta({ nombre: '', proveedor: '', codigo: '', tipo: 'proveedor' })
+  }
+
   async function crearEncuesta() {
     setErrorNueva(null)
     if (!nuevaEncuesta.nombre.trim() || !nuevaEncuesta.codigo.trim()) {
@@ -82,8 +88,7 @@ export default function GestionEncuesta() {
       return
     }
     setEncuestas([...encuestas, data])
-    setModalNueva(false)
-    setNuevaEncuesta({ nombre: '', proveedor: '', codigo: '', tipo: 'proveedor' })
+    cerrarModalNueva()
   }
 
   async function alternarActivaEncuesta(e: Encuesta) {
@@ -220,7 +225,14 @@ export default function GestionEncuesta() {
               <option value="paciente">Paciente (la responde el paciente, la registra un orientador)</option>
             </Select>
             {errorNueva && <p className="text-sm text-rose-600">{errorNueva}</p>}
-            <Boton onClick={crearEncuesta}>Crear</Boton>
+            <div className="flex gap-2">
+              <Boton variant="secundario" className="flex-1" onClick={cerrarModalNueva}>
+                Cancelar
+              </Boton>
+              <Boton className="flex-1" onClick={crearEncuesta}>
+                Crear
+              </Boton>
+            </div>
           </div>
         </Modal>
       </div>

@@ -9,6 +9,22 @@ export const ESCALA_4_COLOR: Record<string, string> = {
 
 export const ESCALA_1_5 = ['1', '2', '3', '4', '5'] as const
 
+export const ESCALA_1_5_COLOR: Record<string, string> = {
+  '1': '#ef4444',
+  '2': '#f97316',
+  '3': '#eab308',
+  '4': '#3b82f6',
+  '5': '#22c55e',
+}
+
+export const ESCALA_1_5_LABEL: Record<string, string> = {
+  '1': 'Muy malo',
+  '2': 'Malo',
+  '3': 'Regular',
+  '4': 'Bueno',
+  '5': 'Excelente',
+}
+
 export const SI_NO = ['SI', 'No'] as const
 
 export const ROL_LABEL: Record<string, string> = {

@@ -3,7 +3,7 @@ import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { listarAreas, listarEncuestasParaDiligenciar, listarPreguntas } from '../lib/data'
 import { PageHeader, Card, Boton, Input, Select, Textarea } from '../components/ui'
-import { ESCALA_4, ESCALA_1_5, SI_NO } from '../lib/constantes'
+import { ESCALA_4, ESCALA_4_COLOR, ESCALA_1_5, ESCALA_1_5_COLOR, ESCALA_1_5_LABEL, SI_NO } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
 type Encuesta = Database['public']['Tables']['encuestas']['Row']
@@ -203,72 +203,103 @@ export default function DiligenciarEncuesta() {
           </Select>
         )}
 
-        {preguntas.map((p) => (
-          <div key={p.id}>
-            <label className="mb-1 block text-sm font-medium text-slate-700">
-              {p.texto}
-              {p.requerida && <span className="text-rose-500"> *</span>}
+        {preguntas.map((p, idx) => (
+          <div key={p.id} className="neu-flat p-4">
+            <label className="mb-3 flex items-start gap-3 text-sm font-medium text-slate-700">
+              <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--azul)] text-xs font-semibold text-white">
+                {idx + 1}
+              </span>
+              <span>
+                {p.texto}
+                {p.requerida && <span className="text-rose-500"> *</span>}
+              </span>
             </label>
             {p.tipo_respuesta === 'escala_4' && (
-              <div className="flex flex-wrap gap-2">
-                {ESCALA_4.map((op) => (
-                  <button
-                    key={op}
-                    type="button"
-                    onClick={() => setRespuestas({ ...respuestas, [p.id]: op })}
-                    className={
-                      respuestas[p.id] === op
-                        ? 'neu-convex px-3 py-1.5 text-sm text-white'
-                        : 'neu-btn px-3 py-1.5 text-sm text-[var(--azul)]'
-                    }
-                  >
-                    {op}
-                  </button>
-                ))}
+              <div className="flex flex-wrap gap-2 pl-9">
+                {ESCALA_4.map((op) => {
+                  const seleccionado = respuestas[p.id] === op
+                  return (
+                    <button
+                      key={op}
+                      type="button"
+                      onClick={() => setRespuestas({ ...respuestas, [p.id]: op })}
+                      style={seleccionado ? { background: ESCALA_4_COLOR[op], borderColor: ESCALA_4_COLOR[op] } : undefined}
+                      className={
+                        seleccionado
+                          ? 'rounded-xl px-3 py-1.5 text-sm font-medium text-white shadow-md transition-transform scale-105'
+                          : 'neu-btn px-3 py-1.5 text-sm text-[var(--azul)] transition-transform hover:scale-105'
+                      }
+                    >
+                      {op}
+                    </button>
+                  )
+                })}
               </div>
             )}
             {p.tipo_respuesta === 'escala_1_5' && (
-              <div className="flex gap-2">
-                {ESCALA_1_5.map((op) => (
-                  <button
-                    key={op}
-                    type="button"
-                    onClick={() => setRespuestas({ ...respuestas, [p.id]: op })}
-                    className={
-                      respuestas[p.id] === op
-                        ? 'neu-convex h-9 w-9 text-sm text-white'
-                        : 'neu-btn h-9 w-9 text-sm text-[var(--azul)]'
-                    }
+              <div className="pl-9">
+                <div className="grid max-w-xs grid-cols-5 gap-2">
+                  {ESCALA_1_5.map((op) => {
+                    const seleccionado = respuestas[p.id] === op
+                    return (
+                      <button
+                        key={op}
+                        type="button"
+                        onClick={() => setRespuestas({ ...respuestas, [p.id]: op })}
+                        style={seleccionado ? { background: ESCALA_1_5_COLOR[op] } : undefined}
+                        className={
+                          seleccionado
+                            ? 'aspect-square rounded-xl text-base font-semibold text-white shadow-md transition-transform scale-105'
+                            : 'neu-btn aspect-square rounded-xl text-base text-slate-400 transition-transform hover:scale-105'
+                        }
+                      >
+                        {op}
+                      </button>
+                    )
+                  })}
+                </div>
+                {respuestas[p.id] && (
+                  <span
+                    className="mt-2 inline-block rounded-full px-3 py-1 text-xs font-medium text-white"
+                    style={{ background: ESCALA_1_5_COLOR[respuestas[p.id]] }}
                   >
-                    {op}
-                  </button>
-                ))}
+                    {ESCALA_1_5_LABEL[respuestas[p.id]]}
+                  </span>
+                )}
               </div>
             )}
             {p.tipo_respuesta === 'si_no' && (
-              <div className="flex gap-2">
-                {SI_NO.map((op) => (
-                  <button
-                    key={op}
-                    type="button"
-                    onClick={() => setRespuestas({ ...respuestas, [p.id]: op })}
-                    className={
-                      respuestas[p.id] === op
-                        ? 'neu-convex px-4 py-1.5 text-sm text-white'
-                        : 'neu-btn px-4 py-1.5 text-sm text-[var(--azul)]'
-                    }
-                  >
-                    {op}
-                  </button>
-                ))}
+              <div className="flex gap-3 pl-9">
+                {SI_NO.map((op) => {
+                  const seleccionado = respuestas[p.id] === op
+                  const esSi = op === 'SI'
+                  return (
+                    <button
+                      key={op}
+                      type="button"
+                      onClick={() => setRespuestas({ ...respuestas, [p.id]: op })}
+                      style={seleccionado ? { background: esSi ? '#22c55e' : '#ef4444' } : undefined}
+                      className={
+                        seleccionado
+                          ? 'flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-white shadow-md transition-transform scale-105'
+                          : 'neu-btn flex items-center gap-2 rounded-xl px-4 py-2 text-sm text-[var(--azul)] transition-transform hover:scale-105'
+                      }
+                    >
+                      <span>{esSi ? '👍' : '👎'}</span>
+                      {op}
+                    </button>
+                  )
+                })}
               </div>
             )}
             {p.tipo_respuesta === 'texto_libre' && (
-              <Textarea
-                rows={3}
-                value={respuestas[p.id] ?? ''}
-                onChange={(e) => setRespuestas({ ...respuestas, [p.id]: e.target.value })}
-              />
+              <div className="pl-9">
+                <Textarea
+                  rows={3}
+                  value={respuestas[p.id] ?? ''}
+                  onChange={(e) => setRespuestas({ ...respuestas, [p.id]: e.target.value })}
+                />
+              </div>
             )}
           </div>
         ))}
