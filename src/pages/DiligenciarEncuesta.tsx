@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import { listarAreas, listarEncuestasAsignadas, listarPreguntas } from '../lib/data'
+import { listarAreas, listarEncuestasParaDiligenciar, listarPreguntas } from '../lib/data'
 import { PageHeader, Card, Boton, Input, Select, Textarea } from '../components/ui'
 import { ESCALA_4, ESCALA_1_5, SI_NO } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
@@ -32,7 +32,7 @@ export default function DiligenciarEncuesta() {
 
   useEffect(() => {
     if (!perfil) return
-    listarEncuestasAsignadas(perfil.id).then((es) => setEncuestas(es as Encuesta[]))
+    listarEncuestasParaDiligenciar(perfil.id, perfil.role).then((es) => setEncuestas(es as Encuesta[]))
     listarAreas().then(setAreas)
   }, [perfil])
 

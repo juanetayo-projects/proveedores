@@ -27,7 +27,11 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   const esAdmin = perfil?.role === 'administrador'
   const esCoordOAdmin = perfil?.role === 'administrador' || perfil?.role === 'coordinador_administrativo'
-  const puedeResponder = perfil?.role === 'encuestado' || perfil?.role === 'orientador'
+  const puedeResponder =
+    perfil?.role === 'encuestado' ||
+    perfil?.role === 'orientador' ||
+    perfil?.role === 'administrador' ||
+    perfil?.role === 'coordinador_administrativo'
 
   async function salir() {
     await supabase.auth.signOut()

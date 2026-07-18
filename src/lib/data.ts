@@ -9,6 +9,17 @@ export async function listarEncuestasAsignadas(profileId: string) {
   return (data ?? []).map((a) => a.encuestas).filter(Boolean)
 }
 
+/** Administrador/coordinador pueden diligenciar cualquier encuesta activa,
+ * sin necesidad de una fila de asignación (ya tienen acceso total). */
+export async function listarEncuestasParaDiligenciar(profileId: string, rol: string) {
+  if (rol === 'administrador' || rol === 'coordinador_administrativo') {
+    const { data, error } = await supabase.from('encuestas').select('*').eq('activa', true).order('id')
+    if (error) throw error
+    return data ?? []
+  }
+  return listarEncuestasAsignadas(profileId)
+}
+
 export async function listarPreguntas(encuestaId: number) {
   const { data, error } = await supabase
     .from('preguntas')

@@ -30,7 +30,7 @@ export default function App() {
           <Route
             path="/diligenciar"
             element={
-              <Guard roles={['encuestado', 'orientador']}>
+              <Guard roles={['encuestado', 'orientador', 'administrador', 'coordinador_administrativo']}>
                 <DiligenciarEncuesta />
               </Guard>
             }
