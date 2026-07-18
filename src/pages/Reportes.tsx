@@ -16,6 +16,9 @@ type Fila = {
   paciente_numero_habitacion: string | null
 }
 
+type DetalleFila = { pregunta: string; valor: string }
+type PopoverState = { x: number; y: number; titulo: string; filas: DetalleFila[]; cargando: boolean } | null
+
 export default function Reportes() {
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [encuestaId, setEncuestaId] = useState<number | ''>('')
@@ -23,6 +26,7 @@ export default function Reportes() {
   const [hasta, setHasta] = useState('')
   const [filas, setFilas] = useState<Fila[]>([])
   const [cargando, setCargando] = useState(false)
+  const [popover, setPopover] = useState<PopoverState>(null)
 
   useEffect(() => {
     listarEncuestas().then((es) => {
@@ -66,6 +70,26 @@ export default function Reportes() {
   }
 
   const encuestaActual = useMemo(() => encuestas.find((e) => e.id === encuestaId), [encuestas, encuestaId])
+
+  async function verRespuestas(f: Fila, e: { clientX: number; clientY: number }) {
+    const titulo = f.paciente_nombre ?? f.area_servicio_nombre ?? `Respuesta ${f.id}`
+    const x = Math.max(8, Math.min(e.clientX, window.innerWidth - 340))
+    const y = Math.max(8, Math.min(e.clientY, window.innerHeight - 320))
+    setPopover({ x, y, titulo, filas: [], cargando: true })
+    const { data } = await supabase
+      .from('respuestas_detalle')
+      .select('valor, preguntas(texto, orden)')
+      .eq('respuesta_id', f.id)
+      .order('pregunta_id')
+    const detalle = (data ?? [])
+      .map((d) => ({
+        pregunta: (d.preguntas as unknown as { texto: string; orden: number } | null)?.texto ?? '',
+        orden: (d.preguntas as unknown as { texto: string; orden: number } | null)?.orden ?? 0,
+        valor: d.valor,
+      }))
+      .sort((a, b) => a.orden - b.orden)
+    setPopover({ x, y, titulo, filas: detalle, cargando: false })
+  }
 
   async function exportarExcel() {
     const { exportarExcel: fn } = await import('../lib/exportar')
@@ -114,9 +138,9 @@ export default function Reportes() {
       />
 
       <FilterBar>
-        <div>
+        <div className="w-56">
           <label className="mb-1 block text-xs text-slate-500">Encuesta</label>
-          <Select value={encuestaId} onChange={(e) => setEncuestaId(Number(e.target.value))} className="w-56">
+          <Select value={encuestaId} onChange={(e) => setEncuestaId(Number(e.target.value))}>
             {encuestas.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.proveedor ?? e.nombre}
@@ -124,11 +148,11 @@ export default function Reportes() {
             ))}
           </Select>
         </div>
-        <div>
+        <div className="w-40">
           <label className="mb-1 block text-xs text-slate-500">Desde</label>
           <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
         </div>
-        <div>
+        <div className="w-40">
           <label className="mb-1 block text-xs text-slate-500">Hasta</label>
           <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </div>
@@ -136,25 +160,30 @@ export default function Reportes() {
       </FilterBar>
 
       <Card>
+        <p className="mb-2 text-xs text-slate-500">Clic en una fila para ver las respuestas de esa encuesta.</p>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-300 text-xs uppercase text-slate-500">
-                <th className="py-2">Fecha</th>
-                <th>Registrado por</th>
-                <th>Área/servicio</th>
-                <th>Paciente</th>
-                <th>Habitación</th>
+                <th className="whitespace-nowrap px-3 py-2">Fecha</th>
+                <th className="whitespace-nowrap px-3 py-2">Registrado por</th>
+                <th className="whitespace-nowrap px-3 py-2">Área/servicio</th>
+                <th className="px-3 py-2">Paciente</th>
+                <th className="whitespace-nowrap px-3 py-2">Habitación</th>
               </tr>
             </thead>
             <tbody>
               {filas.map((f) => (
-                <tr key={f.id} className="border-b border-slate-200">
-                  <td className="py-2">{f.fecha_respuesta}</td>
-                  <td>{f.respondido_por_nombre}</td>
-                  <td>{f.area_servicio_nombre ?? '—'}</td>
-                  <td>{f.paciente_nombre ?? '—'}</td>
-                  <td>{f.paciente_numero_habitacion ?? '—'}</td>
+                <tr
+                  key={f.id}
+                  onClick={(e) => verRespuestas(f, e)}
+                  className="cursor-pointer border-b border-slate-200 hover:bg-[var(--azul)]/5"
+                >
+                  <td className="whitespace-nowrap px-3 py-2">{f.fecha_respuesta}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{f.respondido_por_nombre}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{f.area_servicio_nombre ?? '—'}</td>
+                  <td className="px-3 py-2 hover:underline">{f.paciente_nombre ?? '—'}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{f.paciente_numero_habitacion ?? '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -165,6 +194,36 @@ export default function Reportes() {
           )}
         </div>
       </Card>
+
+      {popover && (
+        <div className="fixed inset-0 z-40" onClick={() => setPopover(null)}>
+          <div
+            className="neu-flat fixed z-50 w-80 p-3"
+            style={{ left: popover.x, top: popover.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-2 flex items-center justify-between gap-2 border-b border-slate-300/50 pb-2">
+              <span className="text-xs font-bold text-[var(--azul)]">{popover.titulo}</span>
+              <button onClick={() => setPopover(null)} className="text-slate-400 hover:text-slate-600">
+                ✕
+              </button>
+            </div>
+            <div className="max-h-72 overflow-y-auto">
+              {popover.cargando && <p className="py-2 text-center text-xs text-slate-400">Cargando…</p>}
+              {!popover.cargando &&
+                popover.filas.map((d, i) => (
+                  <div key={i} className="border-b border-slate-300/30 py-1.5 text-[11px]">
+                    <div className="text-slate-500">{d.pregunta}</div>
+                    <div className="font-medium text-slate-700">{d.valor}</div>
+                  </div>
+                ))}
+              {!popover.cargando && popover.filas.length === 0 && (
+                <p className="py-2 text-center text-xs text-slate-400">Sin respuestas registradas.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
-import { PageHeader, Card, Select } from '../components/ui'
+import { PageHeader, Card, FilterBar, Select, Input, Boton } from '../components/ui'
 import { ESCALA_4, ESCALA_4_COLOR } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
@@ -111,6 +111,8 @@ function PopoverDetalle({ popover, onClose }: { popover: PopoverState; onClose: 
 export default function PanelEjecutivo() {
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [encuestaId, setEncuestaId] = useState<number | ''>('')
+  const [desde, setDesde] = useState('')
+  const [hasta, setHasta] = useState('')
   const [detalle, setDetalle] = useState<DetalleFila[]>([])
   const [popover, setPopover] = useState<PopoverState>(null)
 
@@ -124,27 +126,33 @@ export default function PanelEjecutivo() {
 
   useEffect(() => {
     if (!encuestaId) return
-    ;(async () => {
-      const { data } = await supabase
-        .from('respuestas_detalle')
-        .select(
-          'valor, respuesta_id, preguntas!inner(texto, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, respondido_por, areas_servicio(nombre), profiles(nombre))',
-        )
-        .eq('preguntas.tipo_respuesta', 'escala_4')
-        .eq('respuestas.encuesta_id', encuestaId)
-        .limit(3000)
-      setDetalle(
-        (data ?? []).map((r: any) => ({
-          valor: r.valor,
-          pregunta_texto: r.preguntas.texto,
-          respuesta_id: r.respuesta_id,
-          fecha_respuesta: r.respuestas.fecha_respuesta,
-          area_nombre: r.respuestas.areas_servicio?.nombre ?? null,
-          respondido_por_nombre: r.respuestas.profiles?.nombre ?? null,
-        })),
-      )
-    })()
+    cargarDetalle()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encuestaId])
+
+  async function cargarDetalle() {
+    if (!encuestaId) return
+    let q = supabase
+      .from('respuestas_detalle')
+      .select(
+        'valor, respuesta_id, preguntas!inner(texto, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, respondido_por, areas_servicio(nombre), profiles(nombre))',
+      )
+      .eq('preguntas.tipo_respuesta', 'escala_4')
+      .eq('respuestas.encuesta_id', encuestaId)
+    if (desde) q = q.gte('respuestas.fecha_respuesta', desde)
+    if (hasta) q = q.lte('respuestas.fecha_respuesta', hasta)
+    const { data } = await q.limit(3000)
+    setDetalle(
+      (data ?? []).map((r: any) => ({
+        valor: r.valor,
+        pregunta_texto: r.preguntas.texto,
+        respuesta_id: r.respuesta_id,
+        fecha_respuesta: r.respuestas.fecha_respuesta,
+        area_nombre: r.respuestas.areas_servicio?.nombre ?? null,
+        respondido_por_nombre: r.respuestas.profiles?.nombre ?? null,
+      })),
+    )
+  }
 
   const distribucion = useMemo(
     () => ESCALA_4.map((op) => ({ opcion: op, filas: detalle.filter((d) => d.valor === op) })),
@@ -171,18 +179,29 @@ export default function PanelEjecutivo() {
 
   return (
     <div>
-      <PageHeader
-        titulo="Panel ejecutivo"
-        acciones={
-          <Select value={encuestaId} onChange={(e) => setEncuestaId(Number(e.target.value))} className="w-56">
+      <PageHeader titulo="Panel ejecutivo" />
+
+      <FilterBar>
+        <div className="w-56">
+          <label className="mb-1 block text-xs text-slate-500">Encuesta</label>
+          <Select value={encuestaId} onChange={(e) => setEncuestaId(Number(e.target.value))}>
             {encuestas.map((e) => (
               <option key={e.id} value={e.id}>
                 {e.proveedor ?? e.nombre}
               </option>
             ))}
           </Select>
-        }
-      />
+        </div>
+        <div className="w-40">
+          <label className="mb-1 block text-xs text-slate-500">Desde</label>
+          <Input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} />
+        </div>
+        <div className="w-40">
+          <label className="mb-1 block text-xs text-slate-500">Hasta</label>
+          <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        </div>
+        <Boton onClick={cargarDetalle}>Filtrar</Boton>
+      </FilterBar>
 
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Card className="flex flex-col items-center justify-center">
