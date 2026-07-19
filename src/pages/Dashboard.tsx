@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabase'
-import { listarEncuestas, listarAreas, listarDetalleRespuesta } from '../lib/data'
+import { useAuth } from '../lib/auth'
+import { listarEncuestasParaDiligenciar, listarAreas, listarDetalleRespuesta, formatearFechaHora } from '../lib/data'
 import {
   PageHeader,
   MetricCard,
@@ -24,6 +25,7 @@ const PUNTAJE_4: Record<string, number> = { Excelente: 4, Bueno: 3, Regular: 2, 
 type Fila = {
   id: number
   fecha_respuesta: string
+  fecha_hora: string
   respondido_por_nombre: string
   area_servicio_nombre: string | null
   paciente_nombre: string | null
@@ -31,6 +33,7 @@ type Fila = {
 }
 
 export default function Dashboard() {
+  const { perfil } = useAuth()
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [areas, setAreas] = useState<Area[]>([])
   const [encuestaId, setEncuestaId] = useState<number | ''>('')
@@ -47,15 +50,16 @@ export default function Dashboard() {
   const [popover, setPopover] = useState<PopoverQA>(null)
 
   useEffect(() => {
+    if (!perfil) return
     ;(async () => {
-      const es = await listarEncuestas()
+      const es = (await listarEncuestasParaDiligenciar(perfil.id, perfil.role)) as Encuesta[]
       setEncuestas(es)
       if (es.length > 0) setEncuestaId(es[0].id)
       setAreas(await listarAreas())
       await cargarMetricas(es, '', '')
     })()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [perfil])
 
   useEffect(() => {
     if (encuestaId) cargarTabla()
@@ -101,9 +105,9 @@ export default function Dashboard() {
     setCargandoTabla(true)
     let q = supabase
       .from('respuestas')
-      .select('id, fecha_respuesta, paciente_nombre, paciente_numero_habitacion, profiles(nombre), areas_servicio(nombre)')
+      .select('id, fecha_respuesta, created_at, paciente_nombre, paciente_numero_habitacion, profiles(nombre), areas_servicio(nombre)')
       .eq('encuesta_id', encuestaId)
-      .order('fecha_respuesta', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(200)
     if (desde) q = q.gte('fecha_respuesta', desde)
     if (hasta) q = q.lte('fecha_respuesta', hasta)
@@ -113,6 +117,7 @@ export default function Dashboard() {
       (data ?? []).map((r) => ({
         id: r.id,
         fecha_respuesta: r.fecha_respuesta,
+        fecha_hora: formatearFechaHora(r.created_at),
         respondido_por_nombre: (r.profiles as unknown as { nombre: string } | null)?.nombre ?? '—',
         area_servicio_nombre: (r.areas_servicio as unknown as { nombre: string } | null)?.nombre ?? null,
         paciente_nombre: r.paciente_nombre,
@@ -210,7 +215,7 @@ export default function Dashboard() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-300 text-xs uppercase text-slate-500">
-                <th className="whitespace-nowrap px-3 py-2">Fecha</th>
+                <th className="whitespace-nowrap px-3 py-2">Fecha y hora</th>
                 <th className="whitespace-nowrap px-3 py-2">Registrado por</th>
                 <th className="whitespace-nowrap px-3 py-2">Área/servicio</th>
                 <th className="px-3 py-2">Paciente</th>
@@ -224,7 +229,7 @@ export default function Dashboard() {
                   onClick={(e) => verRespuestas(f, e)}
                   className="cursor-pointer border-b border-slate-200 hover:bg-[var(--azul)]/5"
                 >
-                  <td className="whitespace-nowrap px-3 py-2">{f.fecha_respuesta}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{f.fecha_hora}</td>
                   <td className="whitespace-nowrap px-3 py-2">{f.respondido_por_nombre}</td>
                   <td className="whitespace-nowrap px-3 py-2">{f.area_servicio_nombre ?? '—'}</td>
                   <td className="px-3 py-2">{f.paciente_nombre ?? '—'}</td>

@@ -59,11 +59,12 @@ export function Modal({
       onClick={onClose}
     >
       <div className="neu-flat w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
-        {titulo && (
-          <div className="neu-convex rounded-b-none px-5 py-3 font-medium text-white">
-            {titulo}
-          </div>
-        )}
+        <div className="neu-convex flex items-center justify-between gap-3 rounded-b-none px-5 py-3 font-medium text-white">
+          <span>{titulo}</span>
+          <button type="button" onClick={onClose} className="text-white/70 hover:text-white">
+            ✕
+          </button>
+        </div>
         <div className="p-5">{children}</div>
       </div>
     </div>
@@ -135,16 +136,21 @@ export function PopoverRespuestas({ popover, onClose }: { popover: PopoverQA; on
               const color = colorDeValor(d.tipoRespuesta, d.valor)
               return (
                 <div key={i} className="neu-pressed mb-2 p-2 text-[11px] last:mb-0">
-                  <div className="mb-1 font-medium text-slate-600">{d.pregunta}</div>
+                  <div className="mb-1 flex items-start gap-2 font-medium text-slate-600">
+                    <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--azul)] text-[9px] font-bold text-white">
+                      {i + 1}
+                    </span>
+                    <span>{d.pregunta}</span>
+                  </div>
                   {color ? (
                     <span
-                      className="inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                      className="ml-6 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
                       style={{ background: color }}
                     >
                       {d.valor}
                     </span>
                   ) : (
-                    <div className="font-medium text-slate-800">{d.valor}</div>
+                    <div className="ml-6 font-medium text-slate-800">{d.valor}</div>
                   )}
                 </div>
               )

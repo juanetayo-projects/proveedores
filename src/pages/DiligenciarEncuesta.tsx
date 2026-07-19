@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
 import { listarAreas, listarEncuestasParaDiligenciar, listarPreguntas } from '../lib/data'
@@ -12,9 +13,11 @@ type Area = Database['public']['Tables']['areas_servicio']['Row']
 
 export default function DiligenciarEncuesta() {
   const { perfil } = useAuth()
+  const navigate = useNavigate()
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [areas, setAreas] = useState<Area[]>([])
   const [seleccion, setSeleccion] = useState<Encuesta | null>(null)
+  const [confirmarOtra, setConfirmarOtra] = useState<Encuesta | null>(null)
   const [preguntas, setPreguntas] = useState<Pregunta[]>([])
   const [respuestas, setRespuestas] = useState<Record<number, string>>({})
   const [paciente, setPaciente] = useState({
@@ -95,6 +98,7 @@ export default function DiligenciarEncuesta() {
       }
 
       setOk('Encuesta registrada correctamente.')
+      setConfirmarOtra(seleccion)
       setSeleccion(null)
       setPreguntas([])
     } catch (e) {
@@ -104,11 +108,44 @@ export default function DiligenciarEncuesta() {
     }
   }
 
+  if (confirmarOtra) {
+    return (
+      <div>
+        <PageHeader titulo="Diligenciar encuesta" />
+        <Card className="flex flex-col items-center gap-4 py-10 text-center">
+          <p className="font-medium text-emerald-700">{ok}</p>
+          <p className="text-sm text-slate-600">
+            ¿Deseas diligenciar otra respuesta de "{confirmarOtra.nombre}"?
+          </p>
+          <div className="flex gap-3">
+            <Boton
+              onClick={() => {
+                const e = confirmarOtra
+                setConfirmarOtra(null)
+                elegir(e)
+              }}
+            >
+              Sí, diligenciar otra
+            </Boton>
+            <Boton
+              variant="secundario"
+              onClick={() => {
+                setConfirmarOtra(null)
+                navigate('/')
+              }}
+            >
+              No, volver al dashboard
+            </Boton>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
   if (!seleccion) {
     return (
       <div>
         <PageHeader titulo="Diligenciar encuesta" />
-        {ok && <p className="mb-4 text-sm text-emerald-700">{ok}</p>}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {encuestas.map((e) => {
             const abierta = e.siempre_abierta

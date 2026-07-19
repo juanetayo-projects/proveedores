@@ -63,6 +63,18 @@ export async function listarDetalleRespuesta(respuestaId: number) {
     .map(({ pregunta, valor, tipoRespuesta }) => ({ pregunta, valor, tipoRespuesta }))
 }
 
+export function formatearFechaHora(iso: string): string {
+  const d = new Date(iso)
+  return d.toLocaleString('es-CO', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  })
+}
+
 export async function estaEncuestaAbierta(encuesta: {
   siempre_abierta: boolean
   fecha_apertura: string | null

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { listarEncuestas, listarDetalleRespuesta } from '../lib/data'
+import { listarEncuestas, listarDetalleRespuesta, formatearFechaHora } from '../lib/data'
 import { PageHeader, Card, FilterBar, Select, Input, Boton, PopoverRespuestas, calcularPosicionPopover, type PopoverQA } from '../components/ui'
 import type { Database } from '../lib/database.types'
 
@@ -9,6 +9,7 @@ type Encuesta = Database['public']['Tables']['encuestas']['Row']
 type Fila = {
   id: number
   fecha_respuesta: string
+  fecha_hora: string
   respondido_por_nombre: string
   area_servicio_nombre: string | null
   identificador_evaluado: string | null
@@ -44,10 +45,10 @@ export default function Reportes() {
     let q = supabase
       .from('respuestas')
       .select(
-        'id, fecha_respuesta, identificador_evaluado, paciente_nombre, paciente_numero_habitacion, profiles(nombre), areas_servicio(nombre)',
+        'id, fecha_respuesta, created_at, identificador_evaluado, paciente_nombre, paciente_numero_habitacion, profiles(nombre), areas_servicio(nombre)',
       )
       .eq('encuesta_id', encuestaId)
-      .order('fecha_respuesta', { ascending: false })
+      .order('created_at', { ascending: false })
       .limit(1000)
     if (desde) q = q.gte('fecha_respuesta', desde)
     if (hasta) q = q.lte('fecha_respuesta', hasta)
@@ -56,6 +57,7 @@ export default function Reportes() {
       (data ?? []).map((r) => ({
         id: r.id,
         fecha_respuesta: r.fecha_respuesta,
+        fecha_hora: formatearFechaHora(r.created_at),
         respondido_por_nombre: (r.profiles as unknown as { nombre: string } | null)?.nombre ?? '—',
         area_servicio_nombre: (r.areas_servicio as unknown as { nombre: string } | null)?.nombre ?? null,
         identificador_evaluado: r.identificador_evaluado,
@@ -81,7 +83,7 @@ export default function Reportes() {
     await fn(
       `reporte_${encuestaActual?.codigo ?? 'encuesta'}`,
       [
-        { header: 'Fecha', key: 'fecha_respuesta' },
+        { header: 'Fecha y hora', key: 'fecha_hora' },
         { header: 'Registrado por', key: 'respondido_por_nombre' },
         { header: 'Área/servicio', key: 'area_servicio_nombre' },
         { header: 'Paciente', key: 'paciente_nombre' },
@@ -95,9 +97,9 @@ export default function Reportes() {
     const { exportarPDF: fn } = await import('../lib/exportar')
     await fn(
       `reporte_${encuestaActual?.codigo ?? 'encuesta'}`,
-      ['Fecha', 'Registrado por', 'Área/servicio', 'Paciente', 'Habitación'],
+      ['Fecha y hora', 'Registrado por', 'Área/servicio', 'Paciente', 'Habitación'],
       filas.map((f) => [
-        f.fecha_respuesta,
+        f.fecha_hora,
         f.respondido_por_nombre,
         f.area_servicio_nombre ?? '',
         f.paciente_nombre ?? '',
@@ -150,7 +152,7 @@ export default function Reportes() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-300 text-xs uppercase text-slate-500">
-                <th className="whitespace-nowrap px-3 py-2">Fecha</th>
+                <th className="whitespace-nowrap px-3 py-2">Fecha y hora</th>
                 <th className="whitespace-nowrap px-3 py-2">Registrado por</th>
                 <th className="whitespace-nowrap px-3 py-2">Área/servicio</th>
                 <th className="px-3 py-2">Paciente</th>
@@ -164,7 +166,7 @@ export default function Reportes() {
                   onClick={(e) => verRespuestas(f, e)}
                   className="cursor-pointer border-b border-slate-200 hover:bg-[var(--azul)]/5"
                 >
-                  <td className="whitespace-nowrap px-3 py-2">{f.fecha_respuesta}</td>
+                  <td className="whitespace-nowrap px-3 py-2">{f.fecha_hora}</td>
                   <td className="whitespace-nowrap px-3 py-2">{f.respondido_por_nombre}</td>
                   <td className="whitespace-nowrap px-3 py-2">{f.area_servicio_nombre ?? '—'}</td>
                   <td className="px-3 py-2 hover:underline">{f.paciente_nombre ?? '—'}</td>
