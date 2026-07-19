@@ -80,6 +80,7 @@ export default function Layout({ children }: { children: ReactNode }) {
         <Item to="/">Dashboard</Item>
         {puedeResponder && <Item to="/diligenciar">Diligenciar encuesta</Item>}
         {esCoordOAdmin && <Item to="/gestion">Gestión de encuesta</Item>}
+        {esCoordOAdmin && <Item to="/asignaciones">Asignaciones</Item>}
         <Item to="/reportes">Reportes</Item>
         {esCoordOAdmin && <Item to="/panel-ejecutivo">Panel ejecutivo</Item>}
 

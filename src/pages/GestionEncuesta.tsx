@@ -2,19 +2,16 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { listarEncuestas, listarPreguntas } from '../lib/data'
 import { PageHeader, Card, Boton, Input, Select, Badge, Modal } from '../components/ui'
-import { TIPO_RESPUESTA_LABEL, ROL_LABEL } from '../lib/constantes'
+import { TIPO_RESPUESTA_LABEL } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
 type Encuesta = Database['public']['Tables']['encuestas']['Row']
 type Pregunta = Database['public']['Tables']['preguntas']['Row']
-type Profile = Database['public']['Tables']['profiles']['Row']
 
 export default function GestionEncuesta() {
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [activa, setActiva] = useState<Encuesta | null>(null)
   const [preguntas, setPreguntas] = useState<Pregunta[]>([])
-  const [asignados, setAsignados] = useState<Profile[]>([])
-  const [candidatos, setCandidatos] = useState<Profile[]>([])
   const [nuevaPregunta, setNuevaPregunta] = useState('')
   const [tipoNuevaPregunta, setTipoNuevaPregunta] = useState('escala_4')
   const [editandoPregunta, setEditandoPregunta] = useState<number | null>(null)
@@ -35,19 +32,6 @@ export default function GestionEncuesta() {
     setActiva(e)
     setPreguntas(await listarPreguntas(e.id))
     setEditandoPregunta(null)
-    const { data: asign } = await supabase
-      .from('asignaciones_encuestado')
-      .select('profile_id, profiles(*)')
-      .eq('encuesta_id', e.id)
-    setAsignados(((asign ?? []).map((a) => a.profiles).filter(Boolean)) as Profile[])
-
-    const rolBuscado = e.tipo === 'paciente' ? 'orientador' : 'encuestado'
-    const { data: perfiles } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('role', rolBuscado)
-      .eq('activo', true)
-    setCandidatos(perfiles ?? [])
   }
 
   async function guardarCampoEncuesta(campo: keyof Encuesta, valor: string | boolean) {
@@ -141,29 +125,6 @@ export default function GestionEncuesta() {
     setPreguntas(preguntas.filter((p) => p.id !== id))
   }
 
-  async function asignar(profileId: string) {
-    if (!activa) return
-    const { error } = await supabase
-      .from('asignaciones_encuestado')
-      .insert({ profile_id: profileId, encuesta_id: activa.id })
-    if (error) {
-      alert(error.message)
-      return
-    }
-    const perfil = candidatos.find((c) => c.id === profileId)
-    if (perfil) setAsignados([...asignados, perfil])
-  }
-
-  async function desasignar(profileId: string) {
-    if (!activa) return
-    await supabase
-      .from('asignaciones_encuestado')
-      .delete()
-      .eq('profile_id', profileId)
-      .eq('encuesta_id', activa.id)
-    setAsignados(asignados.filter((a) => a.id !== profileId))
-  }
-
   if (!activa) {
     return (
       <div>
@@ -238,8 +199,6 @@ export default function GestionEncuesta() {
       </div>
     )
   }
-
-  const rolAsignable = activa.tipo === 'paciente' ? 'orientador' : 'encuestado'
 
   return (
     <div>
@@ -371,33 +330,6 @@ export default function GestionEncuesta() {
           </Select>
           <Boton onClick={agregarPregunta}>Agregar</Boton>
         </div>
-      </Card>
-
-      <Card>
-        <h2 className="mb-3 font-semibold text-[var(--azul)]">
-          Encuestados asignados ({ROL_LABEL[rolAsignable]})
-        </h2>
-        <ul className="mb-4 flex flex-col gap-2">
-          {asignados.map((a) => (
-            <li key={a.id} className="neu-pressed flex items-center justify-between px-3 py-2 text-sm">
-              {a.nombre} <span className="text-xs text-slate-500">{a.email}</span>
-              <button onClick={() => desasignar(a.id)} className="text-xs text-rose-600 hover:underline">
-                Quitar
-              </button>
-            </li>
-          ))}
-          {asignados.length === 0 && <p className="text-sm text-slate-500">Nadie asignado todavía.</p>}
-        </ul>
-        <Select onChange={(e) => e.target.value && asignar(e.target.value)} value="">
-          <option value="">Asignar {ROL_LABEL[rolAsignable].toLowerCase()}…</option>
-          {candidatos
-            .filter((c) => !asignados.some((a) => a.id === c.id))
-            .map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.nombre} — {c.email}
-              </option>
-            ))}
-        </Select>
       </Card>
     </div>
   )

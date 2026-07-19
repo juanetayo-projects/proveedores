@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
 import { PageHeader, Card, FilterBar, Select, Input, Boton } from '../components/ui'
@@ -173,32 +173,16 @@ export default function PanelEjecutivo() {
       .slice(0, 10)
   }, [detalle, esPaciente])
 
-  const tendenciaMensual = useMemo(() => {
+  const tendenciaDiaria = useMemo(() => {
     const respuestasUnicas = new Map<number, string>()
     for (const f of detalle) respuestasUnicas.set(f.respuesta_id, f.fecha_respuesta)
-    const porMes = new Map<string, number>()
+    const porDia = new Map<string, number>()
     for (const fecha of respuestasUnicas.values()) {
-      const mes = fecha.slice(0, 7)
-      porMes.set(mes, (porMes.get(mes) ?? 0) + 1)
+      porDia.set(fecha, (porDia.get(fecha) ?? 0) + 1)
     }
-    const porMesSatisfaccion = new Map<string, { positivos: number; total: number }>()
-    for (const f of detalle) {
-      const mes = f.fecha_respuesta.slice(0, 7)
-      const e = porMesSatisfaccion.get(mes) ?? { positivos: 0, total: 0 }
-      e.total += 1
-      if (esPositivo(f.valor)) e.positivos += 1
-      porMesSatisfaccion.set(mes, e)
-    }
-    return Array.from(porMes.keys())
-      .sort()
-      .map((mes) => {
-        const s = porMesSatisfaccion.get(mes)
-        return {
-          mes,
-          respuestas: porMes.get(mes) ?? 0,
-          satisfaccion: s && s.total > 0 ? Math.round((s.positivos / s.total) * 100) : 0,
-        }
-      })
+    return Array.from(porDia.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([dia, cantidad]) => ({ dia, cantidad }))
   }, [detalle])
 
   return (
@@ -263,23 +247,28 @@ export default function PanelEjecutivo() {
         </Card>
 
         <Card>
-          <h2 className="mb-3 font-semibold text-[var(--azul)]">Tendencia mensual de satisfacción</h2>
-          {tendenciaMensual.length > 0 ? (
+          <h2 className="mb-3 font-semibold text-[var(--azul)]">Encuestas realizadas por día</h2>
+          {tendenciaDiaria.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
-              <LineChart data={tendenciaMensual}>
+              <BarChart data={tendenciaDiaria} margin={{ bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#c3cbe0" />
-                <XAxis dataKey="mes" tick={{ fontSize: 10 }} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={30} />
-                <RTooltip formatter={(v) => `${v}%`} />
-                <Line type="monotone" dataKey="satisfaccion" stroke="#16468e" strokeWidth={2} dot={{ r: 3 }} />
-              </LineChart>
+                <XAxis
+                  dataKey="dia"
+                  tick={{ fontSize: 9 }}
+                  interval="preserveStartEnd"
+                  angle={-40}
+                  textAnchor="end"
+                  height={40}
+                />
+                <YAxis allowDecimals={false} tick={{ fontSize: 10 }} width={30} />
+                <RTooltip />
+                <Bar dataKey="cantidad" fill="#16468e" radius={[4, 4, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           ) : (
-            <p className="text-sm text-slate-500">Sin datos suficientes para la tendencia.</p>
+            <p className="text-sm text-slate-500">Sin datos suficientes.</p>
           )}
-          <p className="mt-1 text-[10px] text-slate-400">
-            {esPaciente ? '% de respuestas 4 y 5 por mes' : '% de respuestas Excelente + Bueno por mes'}
-          </p>
+          <p className="mt-1 text-[10px] text-slate-400">Cantidad de encuestas diligenciadas por día en el período filtrado</p>
         </Card>
       </div>
 
