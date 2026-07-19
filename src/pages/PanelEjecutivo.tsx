@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
@@ -105,7 +105,9 @@ export default function PanelEjecutivo() {
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
   const [detalle, setDetalle] = useState<DetalleFila[]>([])
+  const [conteoDiario, setConteoDiario] = useState<{ dia: string; cantidad: number }[]>([])
   const [popover, setPopover] = useState<PopoverState>(null)
+  const cargaVigenteRef = useRef(0)
 
   useEffect(() => {
     listarEncuestas().then((es) => {
@@ -114,9 +116,15 @@ export default function PanelEjecutivo() {
     })
   }, [])
 
+  function recargar() {
+    const miCarga = ++cargaVigenteRef.current
+    cargarDetalle(miCarga)
+    cargarConteoDiario(miCarga)
+  }
+
   useEffect(() => {
     if (!encuestaId) return
-    cargarDetalle()
+    recargar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encuestaId])
 
@@ -126,23 +134,49 @@ export default function PanelEjecutivo() {
   const colorEscala: Record<string, string> = esPaciente ? ESCALA_1_5_COLOR : ESCALA_4_COLOR
   const esPositivo = (valor: string) => (esPaciente ? Number(valor) >= 4 : valor === 'Excelente' || valor === 'Bueno')
 
-  async function cargarDetalle() {
+  /** El proyecto de Supabase limita cada respuesta de la API a 1000 filas sin importar
+   * el .limit() pedido (tope de PostgREST a nivel de proyecto). Para encuestas de alto
+   * volumen (Alimentación) hay que paginar con .range() hasta traer todas las filas.
+   * Las páginas se piden secuenciales (no en paralelo): disparar ~20+ de estas consultas
+   * con join a la vez satura la base y cada una falla con "statement timeout". `miCarga`
+   * corta la paginación si el usuario cambió de encuesta/filtro mientras esta corría
+   * (evita que una carga vieja pise con datos parciales el resultado más reciente). */
+  async function traerTodasLasFilas<T>(
+    miCarga: number,
+    construirQuery: (offset: number, fin: number) => PromiseLike<{ data: T[] | null }>,
+  ) {
+    const TAMANO_PAGINA = 1000
+    const filas: T[] = []
+    let offset = 0
+    while (cargaVigenteRef.current === miCarga) {
+      const { data } = await construirQuery(offset, offset + TAMANO_PAGINA - 1)
+      filas.push(...(data ?? []))
+      if (!data || data.length < TAMANO_PAGINA) break
+      offset += TAMANO_PAGINA
+    }
+    return filas
+  }
+
+  async function cargarDetalle(miCarga: number) {
     if (!encuestaId) return
     const paciente = encuestaActual?.tipo === 'paciente'
-    let q = supabase
-      .from('respuestas_detalle')
-      .select(
-        `valor, respuesta_id, preguntas!inner(texto, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, respondido_por, ${
-          paciente ? 'paciente_tipo_afiliacion' : 'areas_servicio(nombre)'
-        }, profiles(nombre))`,
-      )
-      .eq('preguntas.tipo_respuesta', paciente ? 'escala_1_5' : 'escala_4')
-      .eq('respuestas.encuesta_id', encuestaId)
-    if (desde) q = q.gte('respuestas.fecha_respuesta', desde)
-    if (hasta) q = q.lte('respuestas.fecha_respuesta', hasta)
-    const { data } = await q.limit(3000)
+    const data = await traerTodasLasFilas<any>(miCarga, (desdeIdx, hastaIdx) => {
+      let q = supabase
+        .from('respuestas_detalle')
+        .select(
+          `valor, respuesta_id, preguntas!inner(texto, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, respondido_por, ${
+            paciente ? 'paciente_tipo_afiliacion' : 'areas_servicio(nombre)'
+          }, profiles(nombre))`,
+        )
+        .eq('preguntas.tipo_respuesta', paciente ? 'escala_1_5' : 'escala_4')
+        .eq('respuestas.encuesta_id', encuestaId)
+      if (desde) q = q.gte('respuestas.fecha_respuesta', desde)
+      if (hasta) q = q.lte('respuestas.fecha_respuesta', hasta)
+      return q.range(desdeIdx, hastaIdx)
+    })
+    if (cargaVigenteRef.current !== miCarga) return
     setDetalle(
-      (data ?? []).map((r: any) => ({
+      data.map((r: any) => ({
         valor: r.valor,
         pregunta_texto: r.preguntas.texto,
         respuesta_id: r.respuesta_id,
@@ -150,6 +184,27 @@ export default function PanelEjecutivo() {
         categoria: paciente ? r.respuestas.paciente_tipo_afiliacion ?? null : r.respuestas.areas_servicio?.nombre ?? null,
         respondido_por_nombre: r.respuestas.profiles?.nombre ?? null,
       })),
+    )
+  }
+
+  /** Cuenta respuestas por día directo desde `respuestas` (una fila por respuesta),
+   * en vez de derivarlo de `detalle` (que multiplica filas por pregunta y puede
+   * truncarse en encuestas con mucho volumen). */
+  async function cargarConteoDiario(miCarga: number) {
+    if (!encuestaId) return
+    const data = await traerTodasLasFilas<{ fecha_respuesta: string }>(miCarga, (desdeIdx, hastaIdx) => {
+      let q = supabase.from('respuestas').select('fecha_respuesta').eq('encuesta_id', encuestaId)
+      if (desde) q = q.gte('fecha_respuesta', desde)
+      if (hasta) q = q.lte('fecha_respuesta', hasta)
+      return q.range(desdeIdx, hastaIdx)
+    })
+    if (cargaVigenteRef.current !== miCarga) return
+    const porDia = new Map<string, number>()
+    for (const r of data) porDia.set(r.fecha_respuesta, (porDia.get(r.fecha_respuesta) ?? 0) + 1)
+    setConteoDiario(
+      Array.from(porDia.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([dia, cantidad]) => ({ dia, cantidad })),
     )
   }
 
@@ -172,18 +227,6 @@ export default function PanelEjecutivo() {
       .sort((a, b) => b.cantidad - a.cantidad)
       .slice(0, 10)
   }, [detalle, esPaciente])
-
-  const tendenciaDiaria = useMemo(() => {
-    const respuestasUnicas = new Map<number, string>()
-    for (const f of detalle) respuestasUnicas.set(f.respuesta_id, f.fecha_respuesta)
-    const porDia = new Map<string, number>()
-    for (const fecha of respuestasUnicas.values()) {
-      porDia.set(fecha, (porDia.get(fecha) ?? 0) + 1)
-    }
-    return Array.from(porDia.entries())
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([dia, cantidad]) => ({ dia, cantidad }))
-  }, [detalle])
 
   return (
     <div>
@@ -208,7 +251,11 @@ export default function PanelEjecutivo() {
           <label className="mb-1 block text-xs text-slate-500">Hasta</label>
           <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
         </div>
-        <Boton onClick={cargarDetalle}>Filtrar</Boton>
+        <Boton
+          onClick={recargar}
+        >
+          Filtrar
+        </Boton>
       </FilterBar>
 
       <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -248,9 +295,9 @@ export default function PanelEjecutivo() {
 
         <Card>
           <h2 className="mb-3 font-semibold text-[var(--azul)]">Encuestas realizadas por día</h2>
-          {tendenciaDiaria.length > 0 ? (
+          {conteoDiario.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={tendenciaDiaria} margin={{ bottom: 20 }}>
+              <BarChart data={conteoDiario} margin={{ bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#c3cbe0" />
                 <XAxis
                   dataKey="dia"
