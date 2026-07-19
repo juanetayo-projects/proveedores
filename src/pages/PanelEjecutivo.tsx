@@ -3,7 +3,7 @@ import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip as RTooltip, Resp
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
 import { PageHeader, Card, FilterBar, Select, Input, Boton } from '../components/ui'
-import { ESCALA_4, ESCALA_4_COLOR } from '../lib/constantes'
+import { ESCALA_4, ESCALA_4_COLOR, ESCALA_1_5, ESCALA_1_5_COLOR } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
 type Encuesta = Database['public']['Tables']['encuestas']['Row']
@@ -13,7 +13,7 @@ type DetalleFila = {
   pregunta_texto: string
   respuesta_id: number
   fecha_respuesta: string
-  area_nombre: string | null
+  categoria: string | null
   respondido_por_nombre: string | null
 }
 
@@ -88,7 +88,7 @@ function PopoverDetalle({ popover, onClose }: { popover: PopoverState; onClose: 
             <div key={i} className="neu-pressed mb-2 p-2 text-[11px] last:mb-0">
               <div className="mb-1 flex justify-between text-slate-500">
                 <span>{f.fecha_respuesta}</span>
-                <span>{f.area_nombre ?? '—'}</span>
+                <span>{f.categoria ?? '—'}</span>
               </div>
               <div className="font-medium text-slate-800">{f.pregunta_texto}</div>
             </div>
@@ -109,9 +109,8 @@ export default function PanelEjecutivo() {
 
   useEffect(() => {
     listarEncuestas().then((es) => {
-      const proveedores = es.filter((e) => e.tipo === 'proveedor')
-      setEncuestas(proveedores)
-      if (proveedores.length > 0) setEncuestaId(proveedores[0].id)
+      setEncuestas(es)
+      if (es.length > 0) setEncuestaId(es[0].id)
     })
   }, [])
 
@@ -121,14 +120,23 @@ export default function PanelEjecutivo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [encuestaId])
 
+  const encuestaActual = encuestas.find((e) => e.id === encuestaId)
+  const esPaciente = encuestaActual?.tipo === 'paciente'
+  const opcionesEscala: readonly string[] = esPaciente ? ESCALA_1_5 : ESCALA_4
+  const colorEscala: Record<string, string> = esPaciente ? ESCALA_1_5_COLOR : ESCALA_4_COLOR
+  const esPositivo = (valor: string) => (esPaciente ? Number(valor) >= 4 : valor === 'Excelente' || valor === 'Bueno')
+
   async function cargarDetalle() {
     if (!encuestaId) return
+    const paciente = encuestaActual?.tipo === 'paciente'
     let q = supabase
       .from('respuestas_detalle')
       .select(
-        'valor, respuesta_id, preguntas!inner(texto, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, respondido_por, areas_servicio(nombre), profiles(nombre))',
+        `valor, respuesta_id, preguntas!inner(texto, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, respondido_por, ${
+          paciente ? 'paciente_tipo_afiliacion' : 'areas_servicio(nombre)'
+        }, profiles(nombre))`,
       )
-      .eq('preguntas.tipo_respuesta', 'escala_4')
+      .eq('preguntas.tipo_respuesta', paciente ? 'escala_1_5' : 'escala_4')
       .eq('respuestas.encuesta_id', encuestaId)
     if (desde) q = q.gte('respuestas.fecha_respuesta', desde)
     if (hasta) q = q.lte('respuestas.fecha_respuesta', hasta)
@@ -139,32 +147,31 @@ export default function PanelEjecutivo() {
         pregunta_texto: r.preguntas.texto,
         respuesta_id: r.respuesta_id,
         fecha_respuesta: r.respuestas.fecha_respuesta,
-        area_nombre: r.respuestas.areas_servicio?.nombre ?? null,
+        categoria: paciente ? r.respuestas.paciente_tipo_afiliacion ?? null : r.respuestas.areas_servicio?.nombre ?? null,
         respondido_por_nombre: r.respuestas.profiles?.nombre ?? null,
       })),
     )
   }
 
   const distribucion = useMemo(
-    () => ESCALA_4.map((op) => ({ opcion: op, filas: detalle.filter((d) => d.valor === op) })),
-    [detalle],
+    () => opcionesEscala.map((op) => ({ opcion: op, filas: detalle.filter((d) => d.valor === op) })),
+    [detalle, opcionesEscala],
   )
   const total = detalle.length
-  const positivos = distribucion.filter((d) => d.opcion === 'Excelente' || d.opcion === 'Bueno')
-    .reduce((a, d) => a + d.filas.length, 0)
+  const positivos = detalle.filter((d) => esPositivo(d.valor)).length
   const pctSatisfaccion = total > 0 ? (positivos / total) * 100 : 0
 
-  const porArea = useMemo(() => {
+  const porCategoria = useMemo(() => {
     const map = new Map<string, DetalleFila[]>()
     for (const f of detalle) {
-      const k = f.area_nombre ?? 'Sin área'
+      const k = f.categoria ?? (esPaciente ? 'Sin dato' : 'Sin área')
       map.set(k, [...(map.get(k) ?? []), f])
     }
     return Array.from(map.entries())
-      .map(([area, filas]) => ({ area, cantidad: filas.length, filas }))
+      .map(([categoria, filas]) => ({ categoria, cantidad: filas.length, filas }))
       .sort((a, b) => b.cantidad - a.cantidad)
       .slice(0, 10)
-  }, [detalle])
+  }, [detalle, esPaciente])
 
   const tendenciaMensual = useMemo(() => {
     const respuestasUnicas = new Map<number, string>()
@@ -179,7 +186,7 @@ export default function PanelEjecutivo() {
       const mes = f.fecha_respuesta.slice(0, 7)
       const e = porMesSatisfaccion.get(mes) ?? { positivos: 0, total: 0 }
       e.total += 1
-      if (f.valor === 'Excelente' || f.valor === 'Bueno') e.positivos += 1
+      if (esPositivo(f.valor)) e.positivos += 1
       porMesSatisfaccion.set(mes, e)
     }
     return Array.from(porMes.keys())
@@ -193,8 +200,6 @@ export default function PanelEjecutivo() {
         }
       })
   }, [detalle])
-
-  const encuestaActual = encuestas.find((e) => e.id === encuestaId)
 
   return (
     <div>
@@ -227,13 +232,13 @@ export default function PanelEjecutivo() {
           <h2 className="mb-3 self-start font-semibold text-[var(--azul)]">Satisfacción</h2>
           <AnilloSimple pct={pctSatisfaccion} color="#16a34a">
             <span className="text-2xl font-bold text-[var(--azul)]">{pctSatisfaccion.toFixed(0)}%</span>
-            <span className="text-[10px] text-slate-500">Excelente + Bueno</span>
+            <span className="text-[10px] text-slate-500">{esPaciente ? 'Calificación 4 y 5' : 'Excelente + Bueno'}</span>
           </AnilloSimple>
         </Card>
 
         <Card>
           <h2 className="mb-3 font-semibold text-[var(--azul)]">
-            Distribución — {encuestaActual?.proveedor ?? ''}
+            Distribución — {encuestaActual?.proveedor ?? encuestaActual?.nombre ?? ''}
           </h2>
           <div className="flex flex-wrap items-end gap-4">
             {distribucion.map((d) => (
@@ -246,7 +251,7 @@ export default function PanelEjecutivo() {
                   className="w-9 rounded-t-lg"
                   style={{
                     height: Math.max(6, (d.filas.length / Math.max(1, total)) * 120),
-                    background: ESCALA_4_COLOR[d.opcion],
+                    background: colorEscala[d.opcion],
                   }}
                 />
                 <span className="text-[11px] font-medium text-slate-600">{d.opcion}</span>
@@ -272,23 +277,27 @@ export default function PanelEjecutivo() {
           ) : (
             <p className="text-sm text-slate-500">Sin datos suficientes para la tendencia.</p>
           )}
-          <p className="mt-1 text-[10px] text-slate-400">% de respuestas Excelente + Bueno por mes</p>
+          <p className="mt-1 text-[10px] text-slate-400">
+            {esPaciente ? '% de respuestas 4 y 5 por mes' : '% de respuestas Excelente + Bueno por mes'}
+          </p>
         </Card>
       </div>
 
       <Card>
-        <h2 className="mb-4 font-semibold text-[var(--azul)]">Respuestas por área/servicio</h2>
-        <ResponsiveContainer width="100%" height={Math.max(160, porArea.length * 36)}>
-          <BarChart data={porArea} layout="vertical" margin={{ left: 40 }}>
+        <h2 className="mb-4 font-semibold text-[var(--azul)]">
+          {esPaciente ? 'Respuestas por tipo de afiliación' : 'Respuestas por área/servicio'}
+        </h2>
+        <ResponsiveContainer width="100%" height={Math.max(160, porCategoria.length * 36)}>
+          <BarChart data={porCategoria} layout="vertical" margin={{ left: 40 }}>
             <XAxis type="number" allowDecimals={false} />
-            <YAxis type="category" dataKey="area" width={160} tick={{ fontSize: 11 }} />
+            <YAxis type="category" dataKey="categoria" width={160} tick={{ fontSize: 11 }} />
             <RTooltip />
             <Bar
               dataKey="cantidad"
               fill="#16468e"
               radius={[0, 8, 8, 0]}
               onClick={(data: any, _i, e) =>
-                abrirPopover(setPopover, e, `${data.area} (${data.cantidad})`, data.filas)
+                abrirPopover(setPopover, e, `${data.categoria} (${data.cantidad})`, data.filas)
               }
               cursor="pointer"
             />

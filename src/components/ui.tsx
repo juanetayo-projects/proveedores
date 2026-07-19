@@ -54,11 +54,8 @@ export function Modal({
 }) {
   if (!open) return null
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
-      <div className="neu-flat w-full max-w-lg" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="neu-flat w-full max-w-lg">
         <div className="neu-convex flex items-center justify-between gap-3 rounded-b-none px-5 py-3 font-medium text-white">
           <span>{titulo}</span>
           <button type="button" onClick={onClose} className="text-white/70 hover:text-white">

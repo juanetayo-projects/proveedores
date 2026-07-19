@@ -188,9 +188,14 @@ export default function Usuarios() {
             ))}
           </Select>
           {error && <p className="text-sm text-rose-600">{error}</p>}
-          <Boton onClick={guardar} disabled={guardando}>
-            {guardando ? 'Guardando…' : 'Guardar'}
-          </Boton>
+          <div className="flex gap-2">
+            <Boton variant="secundario" className="flex-1" onClick={() => setModalAbierto(false)}>
+              Cancelar
+            </Boton>
+            <Boton className="flex-1" onClick={guardar} disabled={guardando}>
+              {guardando ? 'Guardando…' : 'Guardar'}
+            </Boton>
+          </div>
         </div>
       </Modal>
     </div>
