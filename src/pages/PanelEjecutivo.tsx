@@ -3,10 +3,17 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, 
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
 import { PageHeader, Card, FilterBar, Select, Input, Boton } from '../components/ui'
-import { ESCALA_4, ESCALA_4_COLOR, ESCALA_1_5, ESCALA_1_5_COLOR } from '../lib/constantes'
+import { ESCALA_4, ESCALA_4_COLOR, ESCALA_1_5, ESCALA_1_5_COLOR, ESCALA_1_5_LABEL } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
 type Encuesta = Database['public']['Tables']['encuestas']['Row']
+
+const DESCRIPCION_ESCALA_4: Record<string, string> = {
+  Excelente: 'Supera lo esperado',
+  Bueno: 'Cumple lo esperado',
+  Regular: 'Cumple parcialmente',
+  Deficiente: 'No cumple lo esperado',
+}
 
 type DetalleFila = {
   valor: string
@@ -68,7 +75,15 @@ function abrirPopover(
   set({ x: Math.max(8, Math.min(cx, window.innerWidth - 320)), y: Math.max(8, Math.min(cy, window.innerHeight - 300)), titulo, filas })
 }
 
-function PopoverDetalle({ popover, onClose }: { popover: PopoverState; onClose: () => void }) {
+function PopoverDetalle({
+  popover,
+  onClose,
+  colorEscala,
+}: {
+  popover: PopoverState
+  onClose: () => void
+  colorEscala: Record<string, string>
+}) {
   if (!popover) return null
   return (
     <div className="fixed inset-0 z-40" onClick={onClose}>
@@ -87,10 +102,19 @@ function PopoverDetalle({ popover, onClose }: { popover: PopoverState; onClose: 
           {popover.filas.map((f, i) => (
             <div key={i} className="neu-pressed mb-2 p-2 text-[11px] last:mb-0">
               <div className="mb-1 flex justify-between text-slate-500">
+                <span className="font-semibold text-[var(--azul)]">Respuesta #{f.respuesta_id}</span>
                 <span>{f.fecha_respuesta}</span>
+              </div>
+              <div className="mb-1 flex justify-between text-slate-500">
                 <span>{f.categoria ?? '—'}</span>
               </div>
-              <div className="font-medium text-slate-800">{f.pregunta_texto}</div>
+              <div className="mb-1 font-medium text-slate-800">{f.pregunta_texto}</div>
+              <span
+                className="inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                style={{ background: colorEscala[f.valor] ?? '#64748b' }}
+              >
+                {f.valor}
+              </span>
             </div>
           ))}
         </div>
@@ -291,6 +315,17 @@ export default function PanelEjecutivo() {
             ))}
             {total === 0 && <p className="text-sm text-slate-500">Sin respuestas todavía.</p>}
           </div>
+          <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 pt-3">
+            {opcionesEscala.map((op) => (
+              <div key={op} className="flex items-center gap-1.5 text-[10px] text-slate-500">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: colorEscala[op] }} />
+                <span>
+                  <strong className="font-medium text-slate-600">{op}</strong>
+                  {esPaciente ? ` = ${ESCALA_1_5_LABEL[op]}` : ` — ${DESCRIPCION_ESCALA_4[op]}`}
+                </span>
+              </div>
+            ))}
+          </div>
         </Card>
 
         <Card>
@@ -341,7 +376,7 @@ export default function PanelEjecutivo() {
         </ResponsiveContainer>
       </Card>
 
-      <PopoverDetalle popover={popover} onClose={() => setPopover(null)} />
+      <PopoverDetalle popover={popover} onClose={() => setPopover(null)} colorEscala={colorEscala} />
     </div>
   )
 }

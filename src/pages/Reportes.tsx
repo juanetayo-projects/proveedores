@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { listarEncuestas, listarDetalleRespuesta, formatearFechaHora } from '../lib/data'
+import { listarEncuestas, listarDetalleRespuesta, listarPreguntas, paginarTodo, formatearFechaHora } from '../lib/data'
 import { PageHeader, Card, FilterBar, Select, Input, Boton, PopoverRespuestas, calcularPosicionPopover, type PopoverQA } from '../components/ui'
+import { colorDeValor } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
 type Encuesta = Database['public']['Tables']['encuestas']['Row']
@@ -71,7 +72,7 @@ export default function Reportes() {
   const encuestaActual = useMemo(() => encuestas.find((e) => e.id === encuestaId), [encuestas, encuestaId])
 
   async function verRespuestas(f: Fila, e: { clientX: number; clientY: number }) {
-    const titulo = f.paciente_nombre ?? f.area_servicio_nombre ?? `Respuesta ${f.id}`
+    const titulo = `${f.paciente_nombre ?? f.area_servicio_nombre ?? 'Respuesta'} · #${f.id}`
     const { x, y } = calcularPosicionPopover(e)
     setPopover({ x, y, titulo, filas: [], cargando: true })
     const detalle = await listarDetalleRespuesta(f.id)
@@ -79,7 +80,35 @@ export default function Reportes() {
   }
 
   async function exportarExcel() {
+    if (!encuestaId || filas.length === 0) return
     const { exportarExcel: fn } = await import('../lib/exportar')
+    const preguntas = await listarPreguntas(encuestaId)
+    const ids = filas.map((f) => f.id)
+    const detalle = await paginarTodo<{ respuesta_id: number; pregunta_id: number; valor: string }>((desdeIdx, hastaIdx) =>
+      supabase.from('respuestas_detalle').select('respuesta_id, pregunta_id, valor').in('respuesta_id', ids).range(desdeIdx, hastaIdx),
+    )
+    const porRespuesta = new Map<number, Map<number, string>>()
+    for (const d of detalle) {
+      if (!porRespuesta.has(d.respuesta_id)) porRespuesta.set(d.respuesta_id, new Map())
+      porRespuesta.get(d.respuesta_id)!.set(d.pregunta_id, d.valor)
+    }
+
+    const columnasPreguntas = preguntas.map((p, idx) => ({ header: `Pregunta #${idx + 1}`, key: `p${p.id}`, width: 14 }))
+    const filasExtendidas = filas.map((f) => {
+      const respuestasFila: Record<string, string> = {}
+      for (const p of preguntas) respuestasFila[`p${p.id}`] = porRespuesta.get(f.id)?.get(p.id) ?? ''
+      return { ...f, ...respuestasFila }
+    })
+    const coloresPorFila = filas.map((f) => {
+      const colores: Record<string, string> = {}
+      for (const p of preguntas) {
+        const valor = porRespuesta.get(f.id)?.get(p.id)
+        const color = valor ? colorDeValor(p.tipo_respuesta, valor) : undefined
+        if (color) colores[`p${p.id}`] = 'FF' + color.replace('#', '').toUpperCase()
+      }
+      return colores
+    })
+
     await fn(
       `reporte_${encuestaActual?.codigo ?? 'encuesta'}`,
       [
@@ -88,8 +117,10 @@ export default function Reportes() {
         { header: 'Área/servicio', key: 'area_servicio_nombre' },
         { header: 'Paciente', key: 'paciente_nombre' },
         { header: 'Habitación', key: 'paciente_numero_habitacion' },
+        ...columnasPreguntas,
       ],
-      filas,
+      filasExtendidas,
+      coloresPorFila,
     )
   }
 

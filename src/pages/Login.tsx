@@ -6,7 +6,7 @@ import { useAuth } from '../lib/auth'
 export default function Login() {
   const { session } = useAuth()
   const navigate = useNavigate()
-  const [email, setEmail] = useState('')
+  const [usuario, setUsuario] = useState('')
   const [password, setPassword] = useState('')
   const [msg, setMsg] = useState<string | null>(null)
   const [modo, setModo] = useState<'login' | 'recuperar'>('login')
@@ -16,10 +16,22 @@ export default function Login() {
     if (session) navigate('/', { replace: true })
   }, [session, navigate])
 
+  async function resolverEmail(nombreUsuario: string) {
+    const { data, error } = await supabase.rpc('email_por_usuario', { p_username: nombreUsuario.trim() })
+    if (error || !data) return null
+    return data as string
+  }
+
   async function entrar(e: FormEvent) {
     e.preventDefault()
     setMsg(null)
     setCargando(true)
+    const email = await resolverEmail(usuario)
+    if (!email) {
+      setCargando(false)
+      setMsg('Credenciales inválidas')
+      return
+    }
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     setCargando(false)
     if (error) setMsg('Credenciales inválidas')
@@ -29,6 +41,12 @@ export default function Login() {
     e.preventDefault()
     setMsg(null)
     setCargando(true)
+    const email = await resolverEmail(usuario)
+    if (!email) {
+      setCargando(false)
+      setMsg('No se pudo enviar el correo')
+      return
+    }
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}#/reset`,
     })
@@ -49,17 +67,19 @@ export default function Login() {
         {modo === 'login' ? (
           <form onSubmit={entrar} className="mt-2 flex w-full flex-col gap-3">
             <input
-              type="email"
+              type="text"
               required
-              placeholder="Correo institucional"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Usuario"
+              autoComplete="username"
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
               className="login-input px-3 py-2 text-sm"
             />
             <input
               type="password"
               required
               placeholder="Contraseña"
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="login-input px-3 py-2 text-sm"
@@ -86,11 +106,12 @@ export default function Login() {
         ) : (
           <form onSubmit={recuperar} className="mt-2 flex w-full flex-col gap-3">
             <input
-              type="email"
+              type="text"
               required
-              placeholder="Correo institucional"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Usuario"
+              autoComplete="username"
+              value={usuario}
+              onChange={(e) => setUsuario(e.target.value)}
               className="login-input px-3 py-2 text-sm"
             />
             {msg && <p className="text-sm text-blue-100">{msg}</p>}

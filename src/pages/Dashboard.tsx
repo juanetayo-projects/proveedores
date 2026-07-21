@@ -133,7 +133,7 @@ export default function Dashboard() {
   }
 
   async function verRespuestas(f: Fila, e: { clientX: number; clientY: number }) {
-    const titulo = f.paciente_nombre ?? f.area_servicio_nombre ?? `Respuesta ${f.id}`
+    const titulo = `${f.paciente_nombre ?? f.area_servicio_nombre ?? 'Respuesta'} · #${f.id}`
     const { x, y } = calcularPosicionPopover(e)
     setPopover({ x, y, titulo, filas: [], cargando: true })
     const detalle = await listarDetalleRespuesta(f.id)

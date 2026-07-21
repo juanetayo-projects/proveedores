@@ -40,3 +40,10 @@ export const TIPO_RESPUESTA_LABEL: Record<string, string> = {
   si_no: 'Sí / No',
   texto_libre: 'Texto libre',
 }
+
+export function colorDeValor(tipoRespuesta: string | undefined, valor: string): string | undefined {
+  if (tipoRespuesta === 'escala_4') return ESCALA_4_COLOR[valor]
+  if (tipoRespuesta === 'escala_1_5') return ESCALA_1_5_COLOR[valor]
+  if (tipoRespuesta === 'si_no') return valor === 'SI' ? '#22c55e' : '#ef4444'
+  return undefined
+}

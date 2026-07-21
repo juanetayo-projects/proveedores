@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react'
-import { ESCALA_4_COLOR, ESCALA_1_5_COLOR } from '../lib/constantes'
+import { colorDeValor } from '../lib/constantes'
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return <div className={`neu-flat p-5 ${className}`}>{children}</div>
@@ -103,13 +103,6 @@ export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
 
 export type DetalleQA = { pregunta: string; valor: string; tipoRespuesta?: string }
 export type PopoverQA = { x: number; y: number; titulo: string; filas: DetalleQA[]; cargando: boolean } | null
-
-function colorDeValor(tipoRespuesta: string | undefined, valor: string): string | undefined {
-  if (tipoRespuesta === 'escala_4') return ESCALA_4_COLOR[valor]
-  if (tipoRespuesta === 'escala_1_5') return ESCALA_1_5_COLOR[valor]
-  if (tipoRespuesta === 'si_no') return valor === 'SI' ? '#22c55e' : '#ef4444'
-  return undefined
-}
 
 export function PopoverRespuestas({ popover, onClose }: { popover: PopoverQA; onClose: () => void }) {
   if (!popover) return null

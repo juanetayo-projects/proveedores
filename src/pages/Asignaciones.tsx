@@ -113,67 +113,69 @@ export default function Asignaciones() {
         />
       </div>
 
-      <Card className="overflow-x-auto p-0">
+      <Card className="p-0">
         {cargando ? (
           <p className="p-5 text-sm text-slate-500">Cargando…</p>
         ) : (
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-slate-300 text-xs uppercase text-slate-500">
-                <th className="sticky left-0 min-w-[200px] bg-[var(--neu-bg)] py-2 pl-4">Usuario</th>
-                {encuestasOrdenadas.map((e) => (
-                  <th key={e.id} className="min-w-[110px] px-2 py-2 text-center font-medium normal-case">
-                    <div>{e.proveedor ?? e.nombre}</div>
-                    <Badge tono={e.tipo === 'paciente' ? 'ambar' : 'azul'}>
-                      {e.tipo === 'paciente' ? 'Paciente' : 'Proveedor'}
-                    </Badge>
-                    <div className="mt-1 text-[10px] font-normal normal-case text-slate-400">
-                      {conteoPorEncuesta.get(e.id) ?? 0} asignado(s)
-                    </div>
-                  </th>
+          <div className="max-h-[65vh] overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-slate-300 text-xs uppercase text-slate-500">
+                  <th className="sticky left-0 top-0 z-30 min-w-[200px] bg-[var(--neu-bg)] py-2 pl-4">Usuario</th>
+                  {encuestasOrdenadas.map((e) => (
+                    <th key={e.id} className="sticky top-0 z-20 min-w-[110px] bg-[var(--neu-bg)] px-2 py-2 text-center font-medium normal-case">
+                      <div>{e.proveedor ?? e.nombre}</div>
+                      <Badge tono={e.tipo === 'paciente' ? 'ambar' : 'azul'}>
+                        {e.tipo === 'paciente' ? 'Paciente' : 'Proveedor'}
+                      </Badge>
+                      <div className="mt-1 text-[10px] font-normal normal-case text-slate-400">
+                        {conteoPorEncuesta.get(e.id) ?? 0} asignado(s)
+                      </div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {usuariosFiltrados.map((u) => (
+                  <tr key={u.id} className="border-b border-slate-200">
+                    <td className="sticky left-0 z-10 min-w-[200px] bg-[var(--neu-bg)] py-2 pl-4">
+                      <div className="font-medium text-slate-700">{u.nombre}</div>
+                      <div className="text-xs text-slate-500">
+                        {u.email} · {ROL_LABEL[u.role]}
+                      </div>
+                    </td>
+                    {encuestasOrdenadas.map((e) => {
+                      const aplica = rolAsignableDeEncuesta(e) === u.role
+                      const clave = `${u.id}:${e.id}`
+                      const marcada = asignadas.has(clave)
+                      return (
+                        <td key={e.id} className="px-2 py-2 text-center">
+                          {aplica ? (
+                            <input
+                              type="checkbox"
+                              checked={marcada}
+                              disabled={guardandoClave === clave}
+                              onChange={() => alternar(u, e)}
+                              className="h-4 w-4 accent-[var(--azul)] disabled:opacity-50"
+                            />
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
                 ))}
-              </tr>
-            </thead>
-            <tbody>
-              {usuariosFiltrados.map((u) => (
-                <tr key={u.id} className="border-b border-slate-200">
-                  <td className="sticky left-0 min-w-[200px] bg-[var(--neu-bg)] py-2 pl-4">
-                    <div className="font-medium text-slate-700">{u.nombre}</div>
-                    <div className="text-xs text-slate-500">
-                      {u.email} · {ROL_LABEL[u.role]}
-                    </div>
-                  </td>
-                  {encuestasOrdenadas.map((e) => {
-                    const aplica = rolAsignableDeEncuesta(e) === u.role
-                    const clave = `${u.id}:${e.id}`
-                    const marcada = asignadas.has(clave)
-                    return (
-                      <td key={e.id} className="px-2 py-2 text-center">
-                        {aplica ? (
-                          <input
-                            type="checkbox"
-                            checked={marcada}
-                            disabled={guardandoClave === clave}
-                            onChange={() => alternar(u, e)}
-                            className="h-4 w-4 accent-[var(--azul)] disabled:opacity-50"
-                          />
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-              {usuariosFiltrados.length === 0 && (
-                <tr>
-                  <td colSpan={encuestasOrdenadas.length + 1} className="py-4 text-center text-sm text-slate-500">
-                    Ningún usuario encuestado/orientador encontrado.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+                {usuariosFiltrados.length === 0 && (
+                  <tr>
+                    <td colSpan={encuestasOrdenadas.length + 1} className="py-4 text-center text-sm text-slate-500">
+                      Ningún usuario encuestado/orientador encontrado.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 

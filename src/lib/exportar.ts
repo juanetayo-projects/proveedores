@@ -4,6 +4,8 @@ export async function exportarExcel(
   nombre: string,
   columnas: { header: string; key: string; width?: number }[],
   filas: Record<string, unknown>[],
+  /** Color de fondo ARGB (ej. "FF16A34A") por fila, indexado por la key de la columna. */
+  coloresPorFila?: (Record<string, string> | undefined)[],
 ) {
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('Datos')
@@ -13,7 +15,20 @@ export async function exportarExcel(
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D2D6B' } }
     cell.font = { color: { argb: 'FFFFFFFF' }, bold: true }
   })
-  filas.forEach((f) => ws.addRow(f))
+  filas.forEach((f, i) => {
+    const row = ws.addRow(f)
+    const colores = coloresPorFila?.[i]
+    if (colores) {
+      for (const [key, argb] of Object.entries(colores)) {
+        const colIdx = columnas.findIndex((c) => c.key === key) + 1
+        if (colIdx > 0) {
+          const cell = row.getCell(colIdx)
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb } }
+          cell.font = { color: { argb: 'FFFFFFFF' }, bold: true }
+        }
+      }
+    }
+  })
 
   const buf = await wb.xlsx.writeBuffer()
   descargar(new Blob([buf]), `${nombre}.xlsx`)

@@ -1,5 +1,23 @@
 import { supabase } from './supabase'
 
+/** El proyecto de Supabase limita cada respuesta de la API a 1000 filas sin importar
+ * el .limit() pedido (tope de PostgREST a nivel de proyecto). Para consultas que puedan
+ * superar eso, paginar con .range() hasta traer todas las filas. */
+export async function paginarTodo<T>(
+  construirQuery: (offset: number, fin: number) => PromiseLike<{ data: T[] | null }>,
+): Promise<T[]> {
+  const TAMANO_PAGINA = 1000
+  const filas: T[] = []
+  let offset = 0
+  while (true) {
+    const { data } = await construirQuery(offset, offset + TAMANO_PAGINA - 1)
+    filas.push(...(data ?? []))
+    if (!data || data.length < TAMANO_PAGINA) break
+    offset += TAMANO_PAGINA
+  }
+  return filas
+}
+
 export async function listarEncuestasAsignadas(profileId: string) {
   const { data, error } = await supabase
     .from('asignaciones_encuestado')

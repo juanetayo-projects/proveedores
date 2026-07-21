@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard'
 import DiligenciarEncuesta from './pages/DiligenciarEncuesta'
 import GestionEncuesta from './pages/GestionEncuesta'
 import Asignaciones from './pages/Asignaciones'
+import EstadoEncuestas from './pages/EstadoEncuestas'
 import Reportes from './pages/Reportes'
 import PanelEjecutivo from './pages/PanelEjecutivo'
 import Usuarios from './pages/admin/Usuarios'
@@ -49,6 +50,14 @@ export default function App() {
             element={
               <Guard roles={['administrador', 'coordinador_administrativo']}>
                 <Asignaciones />
+              </Guard>
+            }
+          />
+          <Route
+            path="/estado-encuestas"
+            element={
+              <Guard roles={['administrador', 'coordinador_administrativo']}>
+                <EstadoEncuestas />
               </Guard>
             }
           />

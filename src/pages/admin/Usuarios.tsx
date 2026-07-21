@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { listarAreas } from '../../lib/data'
+import { listarAreas, listarEncuestas } from '../../lib/data'
 import { PageHeader, Card, Boton, Input, Select, Modal } from '../../components/ui'
 import { ROL_LABEL } from '../../lib/constantes'
 import type { Database } from '../../lib/database.types'
@@ -17,6 +17,7 @@ export default function Usuarios() {
   const [editando, setEditando] = useState<Profile | null>(null)
   const [form, setForm] = useState({
     email: '',
+    username: '',
     password: '',
     nombre: '',
     role: 'encuestado' as Profile['role'],
@@ -36,7 +37,7 @@ export default function Usuarios() {
 
   function abrirNuevo() {
     setEditando(null)
-    setForm({ email: '', password: '', nombre: '', role: 'encuestado', area_servicio_id: '' })
+    setForm({ email: '', username: '', password: '', nombre: '', role: 'encuestado', area_servicio_id: '' })
     setError(null)
     setModalAbierto(true)
   }
@@ -45,6 +46,7 @@ export default function Usuarios() {
     setEditando(u)
     setForm({
       email: u.email,
+      username: u.username,
       password: '',
       nombre: u.nombre,
       role: u.role as Profile['role'],
@@ -64,6 +66,7 @@ export default function Usuarios() {
             accion: 'actualizar',
             id: editando.id,
             nombre: form.nombre,
+            username: form.username,
             role: form.role,
             area_servicio_id: form.area_servicio_id || null,
             activo: editando.activo,
@@ -81,6 +84,7 @@ export default function Usuarios() {
           body: {
             accion: 'crear',
             email: form.email,
+            username: form.username,
             password: form.password,
             nombre: form.nombre,
             role: form.role,
@@ -89,6 +93,15 @@ export default function Usuarios() {
         })
         if (err) throw err
         if (data?.error) throw new Error(data.error)
+        if (form.role === 'encuestado' && data?.id) {
+          const encuestas = await listarEncuestas()
+          const proveedor = encuestas.filter((e) => e.tipo === 'proveedor')
+          if (proveedor.length > 0) {
+            await supabase
+              .from('asignaciones_encuestado')
+              .insert(proveedor.map((e) => ({ profile_id: data.id, encuesta_id: e.id })))
+          }
+        }
       }
       setModalAbierto(false)
       cargar()
@@ -120,6 +133,7 @@ export default function Usuarios() {
           <thead>
             <tr className="border-b border-slate-300 text-xs uppercase text-slate-500">
               <th className="py-2">Nombre</th>
+              <th>Usuario</th>
               <th>Correo</th>
               <th>Rol</th>
               <th>Área</th>
@@ -131,6 +145,7 @@ export default function Usuarios() {
             {usuarios.map((u) => (
               <tr key={u.id} className="border-b border-slate-200">
                 <td className="py-2">{u.nombre}</td>
+                <td>{u.username}</td>
                 <td>{u.email}</td>
                 <td>{ROL_LABEL[u.role]}</td>
                 <td>{areas.find((a) => a.id === u.area_servicio_id)?.nombre ?? '—'}</td>
@@ -156,6 +171,11 @@ export default function Usuarios() {
       <Modal open={modalAbierto} onClose={() => setModalAbierto(false)} titulo={editando ? 'Editar usuario' : 'Nuevo usuario'}>
         <div className="flex flex-col gap-3">
           <Input placeholder="Nombre completo" value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+          <Input
+            placeholder="Usuario (para iniciar sesión)"
+            value={form.username}
+            onChange={(e) => setForm({ ...form, username: e.target.value })}
+          />
           <Input
             type="email"
             placeholder="Correo institucional"

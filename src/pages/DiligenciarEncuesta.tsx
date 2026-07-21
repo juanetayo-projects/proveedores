@@ -44,7 +44,7 @@ export default function DiligenciarEncuesta() {
     setOk(null)
     setErrorMsg(null)
     setRespuestas({})
-    setAreaServicioId('')
+    setAreaServicioId(perfil?.area_servicio_id ?? '')
     setPaciente({
       paciente_nombre: '',
       paciente_identificacion: '',
