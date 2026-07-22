@@ -308,6 +308,28 @@ export type Database = {
       esta_asignado: { Args: { p_encuesta_id: number }; Returns: boolean }
       is_admin: { Args: never; Returns: boolean }
       is_admin_o_coordinador: { Args: never; Returns: boolean }
+      panel_conteo_diario: {
+        Args: { p_desde?: string; p_encuesta_id: number; p_hasta?: string }
+        Returns: {
+          cantidad: number
+          dia: string
+        }[]
+      }
+      panel_distribucion: {
+        Args: { p_desde?: string; p_encuesta_id: number; p_hasta?: string }
+        Returns: {
+          cantidad: number
+          valor: string
+        }[]
+      }
+      panel_por_categoria: {
+        Args: { p_desde?: string; p_encuesta_id: number; p_hasta?: string }
+        Returns: {
+          cantidad: number
+          categoria: string
+          categoria_area_id: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

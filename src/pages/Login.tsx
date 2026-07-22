@@ -11,6 +11,7 @@ export default function Login() {
   const [msg, setMsg] = useState<string | null>(null)
   const [modo, setModo] = useState<'login' | 'recuperar'>('login')
   const [cargando, setCargando] = useState(false)
+  const [verPassword, setVerPassword] = useState(false)
 
   useEffect(() => {
     if (session) navigate('/', { replace: true })
@@ -75,15 +76,25 @@ export default function Login() {
               onChange={(e) => setUsuario(e.target.value)}
               className="login-input px-3 py-2 text-sm"
             />
-            <input
-              type="password"
-              required
-              placeholder="Contraseña"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="login-input px-3 py-2 text-sm"
-            />
+            <div className="relative">
+              <input
+                type={verPassword ? 'text' : 'password'}
+                required
+                placeholder="Contraseña"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="login-input w-full px-3 py-2 pr-10 text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => setVerPassword((v) => !v)}
+                aria-label={verPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                className="absolute inset-y-0 right-0 flex items-center px-3 text-xs font-medium text-blue-200 hover:text-white"
+              >
+                {verPassword ? 'Ocultar' : 'Ver'}
+              </button>
+            </div>
             {msg && <p className="text-sm text-rose-300">{msg}</p>}
             <button
               type="submit"

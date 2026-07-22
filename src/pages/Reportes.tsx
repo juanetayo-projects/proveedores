@@ -79,10 +79,16 @@ export default function Reportes() {
     setPopover({ x, y, titulo, filas: detalle, cargando: false })
   }
 
-  async function exportarExcel() {
-    if (!encuestaId || filas.length === 0) return
-    const { exportarExcel: fn } = await import('../lib/exportar')
-    const preguntas = await listarPreguntas(encuestaId)
+  function filtrosActuales(): { label: string; valor: string }[] {
+    return [
+      { label: 'Encuesta', valor: encuestaActual?.proveedor ?? encuestaActual?.nombre ?? '' },
+      { label: 'Desde', valor: desde || 'Sin definir' },
+      { label: 'Hasta', valor: hasta || 'Sin definir' },
+    ]
+  }
+
+  async function cargarDetallePreguntas() {
+    const preguntas = await listarPreguntas(encuestaId as number)
     const ids = filas.map((f) => f.id)
     const detalle = await paginarTodo<{ respuesta_id: number; pregunta_id: number; valor: string }>((desdeIdx, hastaIdx) =>
       supabase.from('respuestas_detalle').select('respuesta_id, pregunta_id, valor').in('respuesta_id', ids).range(desdeIdx, hastaIdx),
@@ -92,6 +98,13 @@ export default function Reportes() {
       if (!porRespuesta.has(d.respuesta_id)) porRespuesta.set(d.respuesta_id, new Map())
       porRespuesta.get(d.respuesta_id)!.set(d.pregunta_id, d.valor)
     }
+    return { preguntas, porRespuesta }
+  }
+
+  async function exportarExcel() {
+    if (!encuestaId || filas.length === 0) return
+    const { exportarExcel: fn } = await import('../lib/exportar')
+    const { preguntas, porRespuesta } = await cargarDetallePreguntas()
 
     const columnasPreguntas = preguntas.map((p, idx) => ({ header: `Pregunta #${idx + 1}`, key: `p${p.id}`, width: 14 }))
     const filasExtendidas = filas.map((f) => {
@@ -111,6 +124,8 @@ export default function Reportes() {
 
     await fn(
       `reporte_${encuestaActual?.codigo ?? 'encuesta'}`,
+      `Reporte de respuestas — ${encuestaActual?.proveedor ?? encuestaActual?.nombre ?? ''}`,
+      filtrosActuales(),
       [
         { header: 'Fecha y hora', key: 'fecha_hora' },
         { header: 'Registrado por', key: 'respondido_por_nombre' },
@@ -125,17 +140,37 @@ export default function Reportes() {
   }
 
   async function exportarPDF() {
+    if (!encuestaId || filas.length === 0) return
     const { exportarPDF: fn } = await import('../lib/exportar')
+    const { preguntas, porRespuesta } = await cargarDetallePreguntas()
+
+    const headersPreguntas = preguntas.map((_, idx) => `Pregunta #${idx + 1}`)
+    const columnasFijas = 5
+    const filasTabla = filas.map((f) => [
+      f.fecha_hora,
+      f.respondido_por_nombre,
+      f.area_servicio_nombre ?? '',
+      f.paciente_nombre ?? '',
+      f.paciente_numero_habitacion ?? '',
+      ...preguntas.map((p) => porRespuesta.get(f.id)?.get(p.id) ?? ''),
+    ])
+    const coloresPorFila = filas.map((f) => {
+      const colores: Record<number, string> = {}
+      preguntas.forEach((p, idx) => {
+        const valor = porRespuesta.get(f.id)?.get(p.id)
+        const color = valor ? colorDeValor(p.tipo_respuesta, valor) : undefined
+        if (color) colores[columnasFijas + idx] = color
+      })
+      return colores
+    })
+
     await fn(
       `reporte_${encuestaActual?.codigo ?? 'encuesta'}`,
-      ['Fecha y hora', 'Registrado por', 'Área/servicio', 'Paciente', 'Habitación'],
-      filas.map((f) => [
-        f.fecha_hora,
-        f.respondido_por_nombre,
-        f.area_servicio_nombre ?? '',
-        f.paciente_nombre ?? '',
-        f.paciente_numero_habitacion ?? '',
-      ]),
+      `Reporte de respuestas — ${encuestaActual?.proveedor ?? encuestaActual?.nombre ?? ''}`,
+      filtrosActuales(),
+      ['Fecha y hora', 'Registrado por', 'Área/servicio', 'Paciente', 'Habitación', ...headersPreguntas],
+      filasTabla,
+      coloresPorFila,
     )
   }
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { listarAreas, listarEncuestas } from '../../lib/data'
 import { PageHeader, Card, Boton, Input, Select, Modal } from '../../components/ui'
@@ -13,6 +13,9 @@ const ROLES: Profile['role'][] = ['administrador', 'coordinador_administrativo',
 export default function Usuarios() {
   const [usuarios, setUsuarios] = useState<Profile[]>([])
   const [areas, setAreas] = useState<Area[]>([])
+  const [importando, setImportando] = useState(false)
+  const [resultadoImport, setResultadoImport] = useState<{ creados: number; errores: string[] } | null>(null)
+  const inputImportarRef = useRef<HTMLInputElement>(null)
   const [modalAbierto, setModalAbierto] = useState(false)
   const [editando, setEditando] = useState<Profile | null>(null)
   const [form, setForm] = useState({
@@ -112,6 +115,80 @@ export default function Usuarios() {
     }
   }
 
+  async function descargarPlantilla() {
+    const { descargarPlantillaExcel } = await import('../../lib/exportar')
+    await descargarPlantillaExcel(
+      'plantilla_usuarios',
+      [
+        { header: 'Nombre', key: 'nombre', width: 26 },
+        { header: 'Usuario', key: 'usuario', width: 18 },
+        { header: 'Correo', key: 'correo', width: 30 },
+        { header: 'Rol', key: 'rol', width: 26 },
+        { header: 'Área/servicio (opcional)', key: 'area', width: 24 },
+        { header: 'Contraseña temporal', key: 'password', width: 20 },
+      ],
+      [
+        {
+          nombre: 'Ejemplo: María Pérez',
+          usuario: 'maria.perez',
+          correo: 'maria.perez@correo.com',
+          rol: ROL_LABEL.encuestado,
+          area: areas[0]?.nombre ?? '',
+          password: 'Temporal123',
+        },
+      ],
+    )
+  }
+
+  async function importarArchivo(file: File) {
+    setImportando(true)
+    setResultadoImport(null)
+    const { leerExcel } = await import('../../lib/exportar')
+    const filas = await leerExcel(file)
+    const encuestasProveedor = (await listarEncuestas()).filter((e) => e.tipo === 'proveedor')
+    let creados = 0
+    const errores: string[] = []
+    for (const f of filas) {
+      const nombre = (f['Nombre'] ?? '').trim()
+      const username = (f['Usuario'] ?? '').trim()
+      const email = (f['Correo'] ?? '').trim()
+      const rolTexto = (f['Rol'] ?? '').trim()
+      const areaTexto = (f['Área/servicio (opcional)'] ?? '').trim()
+      const password = (f['Contraseña temporal'] ?? '').trim()
+      const etiqueta = nombre || email || username || 'fila sin datos'
+      if (!nombre || !username || !email || !rolTexto || !password) {
+        errores.push(`${etiqueta}: faltan campos obligatorios (nombre, usuario, correo, rol o contraseña)`)
+        continue
+      }
+      const role = ROLES.find((r) => ROL_LABEL[r].toLowerCase() === rolTexto.toLowerCase())
+      if (!role) {
+        errores.push(`${etiqueta}: rol "${rolTexto}" no reconocido`)
+        continue
+      }
+      const area = areaTexto ? areas.find((a) => a.nombre.toLowerCase() === areaTexto.toLowerCase()) : undefined
+      if (areaTexto && !area) {
+        errores.push(`${etiqueta}: área "${areaTexto}" no encontrada en el catálogo`)
+        continue
+      }
+      const { error, data } = await supabase.functions.invoke('admin-usuarios', {
+        body: { accion: 'crear', email, username, password, nombre, role, area_servicio_id: area?.id ?? null },
+      })
+      if (error || data?.error) {
+        errores.push(`${etiqueta}: ${data?.error ?? error?.message ?? 'error desconocido'}`)
+        continue
+      }
+      if (role === 'encuestado' && data?.id && encuestasProveedor.length > 0) {
+        await supabase
+          .from('asignaciones_encuestado')
+          .insert(encuestasProveedor.map((e) => ({ profile_id: data.id, encuesta_id: e.id })))
+      }
+      creados++
+    }
+    setImportando(false)
+    setResultadoImport({ creados, errores })
+    cargar()
+  }
+
   async function alternarActivo(u: Profile) {
     await supabase.functions.invoke('admin-usuarios', {
       body: { accion: 'actualizar', id: u.id, nombre: u.nombre, role: u.role, area_servicio_id: u.area_servicio_id, activo: !u.activo },
@@ -127,7 +204,45 @@ export default function Usuarios() {
 
   return (
     <div>
-      <PageHeader titulo="Usuarios" acciones={<Boton onClick={abrirNuevo}>Nuevo usuario</Boton>} />
+      <PageHeader
+        titulo="Usuarios"
+        acciones={
+          <>
+            <Boton variant="secundario" onClick={descargarPlantilla}>
+              Exportar plantilla
+            </Boton>
+            <Boton variant="secundario" onClick={() => inputImportarRef.current?.click()} disabled={importando}>
+              {importando ? 'Importando…' : 'Importar'}
+            </Boton>
+            <input
+              ref={inputImportarRef}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) importarArchivo(file)
+              }}
+            />
+            <Boton onClick={abrirNuevo}>Nuevo usuario</Boton>
+          </>
+        }
+      />
+      {resultadoImport && (
+        <Card className="mb-4">
+          <p className="text-sm text-slate-700">
+            Importación completa: <strong>{resultadoImport.creados}</strong> usuario(s) creado(s).
+          </p>
+          {resultadoImport.errores.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-xs text-rose-600">
+              {resultadoImport.errores.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
       <Card>
         <table className="w-full text-left text-sm">
           <thead>

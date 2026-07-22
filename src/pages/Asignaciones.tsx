@@ -27,7 +27,6 @@ export default function Asignaciones() {
         .from('profiles')
         .select('*')
         .in('role', ['encuestado', 'orientador'])
-        .eq('activo', true)
         .order('nombre'),
       listarEncuestas(),
       supabase.from('asignaciones_encuestado').select('profile_id, encuesta_id'),
@@ -100,9 +99,15 @@ export default function Asignaciones() {
   return (
     <div>
       <PageHeader titulo="Asignaciones de encuestas" />
-      <p className="mb-4 text-sm text-slate-500">
+      <p className="mb-1 text-sm text-slate-500">
         Marca qué encuestas puede diligenciar cada usuario. Un encuestado solo puede asignarse a encuestas de
-        proveedor; un orientador solo a la encuesta de paciente (Servicio Alimentación).
+        proveedor; un orientador solo a la encuesta de paciente (Servicio Alimentación). Solo aparecen usuarios con
+        rol Encuestado u Orientador — Administrador y Coordinador administrativo ya tienen acceso a todas las
+        encuestas y no requieren asignación.
+      </p>
+      <p className="mb-4 text-xs text-slate-400">
+        Mostrando {usuariosFiltrados.length} de {usuarios.length} usuario{usuarios.length === 1 ? '' : 's'} asignable
+        {usuarios.length === 1 ? '' : 's'}.
       </p>
 
       <div className="mb-4 w-72">
@@ -139,7 +144,10 @@ export default function Asignaciones() {
                 {usuariosFiltrados.map((u) => (
                   <tr key={u.id} className="border-b border-slate-200">
                     <td className="sticky left-0 z-10 min-w-[200px] bg-[var(--neu-bg)] py-2 pl-4">
-                      <div className="font-medium text-slate-700">{u.nombre}</div>
+                      <div className="flex items-center gap-2 font-medium text-slate-700">
+                        {u.nombre}
+                        {!u.activo && <Badge tono="rojo">Inactivo</Badge>}
+                      </div>
                       <div className="text-xs text-slate-500">
                         {u.email} · {ROL_LABEL[u.role]}
                       </div>

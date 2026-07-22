@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
-import { PageHeader, Card, FilterBar, Input, Select, Boton } from '../components/ui'
+import { PageHeader, Card, FilterBar, Input, Select, Boton, Badge } from '../components/ui'
 import { ROL_LABEL } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
@@ -16,6 +16,7 @@ export default function EstadoEncuestas() {
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [asignaciones, setAsignaciones] = useState<Map<string, number[]>>(new Map())
   const [diligenciadas, setDiligenciadas] = useState<Map<string, string>>(new Map())
+  const [totalRealizadas, setTotalRealizadas] = useState(0)
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
   const [estado, setEstado] = useState<'todas' | 'diligenciadas' | 'pendientes'>('todas')
@@ -56,6 +57,7 @@ export default function EstadoEncuestas() {
       if (!actual || r.fecha_respuesta > actual) mapaDiligenciadas.set(clave, r.fecha_respuesta)
     }
     setDiligenciadas(mapaDiligenciadas)
+    setTotalRealizadas(resp?.length ?? 0)
     setCargando(false)
   }
 
@@ -89,7 +91,14 @@ export default function EstadoEncuestas() {
 
   return (
     <div>
-      <PageHeader titulo="Estado de encuestas por usuario" />
+      <PageHeader
+        titulo="Estado de encuestas por usuario"
+        acciones={
+          <Badge tono="verde">
+            {totalRealizadas} encuesta{totalRealizadas === 1 ? '' : 's'} realizada{totalRealizadas === 1 ? '' : 's'} en el período
+          </Badge>
+        }
+      />
       <p className="mb-4 text-sm text-slate-500">
         Encuestas asignadas a cada usuario: en verde las diligenciadas y en rojo las pendientes, según el período
         filtrado. Pasa el mouse sobre una diligenciada para ver la fecha del último registro.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { PageHeader, Card, Boton, Input } from '../../components/ui'
 import type { Database } from '../../lib/database.types'
@@ -10,6 +10,9 @@ export default function Areas() {
   const [nueva, setNueva] = useState('')
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [nombreEditado, setNombreEditado] = useState('')
+  const [importando, setImportando] = useState(false)
+  const [resultadoImport, setResultadoImport] = useState<{ creadas: number; duplicadas: number; errores: string[] } | null>(null)
+  const inputImportarRef = useRef<HTMLInputElement>(null)
 
   async function cargar() {
     const { data } = await supabase.from('areas_servicio').select('*').order('nombre')
@@ -47,6 +50,39 @@ export default function Areas() {
     }
   }
 
+  async function descargarPlantilla() {
+    const { descargarPlantillaExcel } = await import('../../lib/exportar')
+    await descargarPlantillaExcel(
+      'plantilla_areas_servicio',
+      [{ header: 'Nombre', key: 'nombre', width: 30 }],
+      [{ nombre: 'Ejemplo: Cirugía' }],
+    )
+  }
+
+  async function importarArchivo(file: File) {
+    setImportando(true)
+    setResultadoImport(null)
+    const { leerExcel } = await import('../../lib/exportar')
+    const filas = await leerExcel(file)
+    let creadas = 0
+    let duplicadas = 0
+    const errores: string[] = []
+    for (const f of filas) {
+      const nombre = (f['Nombre'] ?? f['nombre'] ?? '').trim()
+      if (!nombre) continue
+      const { error } = await supabase.from('areas_servicio').insert({ nombre })
+      if (error) {
+        if (error.code === '23505') duplicadas++
+        else errores.push(`${nombre}: ${error.message}`)
+      } else {
+        creadas++
+      }
+    }
+    setImportando(false)
+    setResultadoImport({ creadas, duplicadas, errores })
+    cargar()
+  }
+
   async function eliminar(a: Area) {
     if (!confirm(`¿Eliminar "${a.nombre}"? Esta acción no se puede deshacer.`)) return
     const { error } = await supabase.from('areas_servicio').delete().eq('id', a.id)
@@ -59,7 +95,45 @@ export default function Areas() {
 
   return (
     <div>
-      <PageHeader titulo="Áreas / servicio" />
+      <PageHeader
+        titulo="Áreas / servicio"
+        acciones={
+          <>
+            <Boton variant="secundario" onClick={descargarPlantilla}>
+              Exportar plantilla
+            </Boton>
+            <Boton variant="secundario" onClick={() => inputImportarRef.current?.click()} disabled={importando}>
+              {importando ? 'Importando…' : 'Importar'}
+            </Boton>
+            <input
+              ref={inputImportarRef}
+              type="file"
+              accept=".xlsx"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) importarArchivo(file)
+              }}
+            />
+          </>
+        }
+      />
+      {resultadoImport && (
+        <Card className="mb-4">
+          <p className="text-sm text-slate-700">
+            Importación completa: <strong>{resultadoImport.creadas}</strong> área(s) creada(s)
+            {resultadoImport.duplicadas > 0 && `, ${resultadoImport.duplicadas} ya existían (omitidas)`}.
+          </p>
+          {resultadoImport.errores.length > 0 && (
+            <ul className="mt-2 list-disc pl-5 text-xs text-rose-600">
+              {resultadoImport.errores.map((e, i) => (
+                <li key={i}>{e}</li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
       <Card>
         <div className="mb-4 flex gap-2">
           <Input placeholder="Nueva área o servicio" value={nueva} onChange={(e) => setNueva(e.target.value)} />
