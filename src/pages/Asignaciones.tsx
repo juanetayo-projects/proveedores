@@ -9,6 +9,7 @@ type Encuesta = Database['public']['Tables']['encuestas']['Row']
 type Profile = Database['public']['Tables']['profiles']['Row']
 
 const rolAsignableDeEncuesta = (e: Encuesta) => (e.tipo === 'paciente' ? 'orientador' : 'encuestado')
+const tieneAccesoTotal = (u: Profile) => u.role === 'administrador' || u.role === 'coordinador_administrativo'
 
 export default function Asignaciones() {
   const [usuarios, setUsuarios] = useState<Profile[]>([])
@@ -23,11 +24,7 @@ export default function Asignaciones() {
   async function cargar() {
     setCargando(true)
     const [{ data: perfiles }, es, { data: asign }] = await Promise.all([
-      supabase
-        .from('profiles')
-        .select('*')
-        .in('role', ['encuestado', 'orientador'])
-        .order('nombre'),
+      supabase.from('profiles').select('*').order('nombre'),
       listarEncuestas(),
       supabase.from('asignaciones_encuestado').select('profile_id, encuesta_id'),
     ])
@@ -50,6 +47,8 @@ export default function Asignaciones() {
     if (!q) return usuarios
     return usuarios.filter((u) => u.nombre.toLowerCase().includes(q) || u.email.toLowerCase().includes(q))
   }, [usuarios, busqueda])
+
+  const usuariosAsignables = useMemo(() => usuarios.filter((u) => !tieneAccesoTotal(u)), [usuarios])
 
   const conteoPorEncuesta = useMemo(() => {
     const map = new Map<number, number>()
@@ -101,13 +100,12 @@ export default function Asignaciones() {
       <PageHeader titulo="Asignaciones de encuestas" />
       <p className="mb-1 text-sm text-slate-500">
         Marca qué encuestas puede diligenciar cada usuario. Un encuestado solo puede asignarse a encuestas de
-        proveedor; un orientador solo a la encuesta de paciente (Servicio Alimentación). Solo aparecen usuarios con
-        rol Encuestado u Orientador — Administrador y Coordinador administrativo ya tienen acceso a todas las
-        encuestas y no requieren asignación.
+        proveedor; un orientador solo a la encuesta de paciente (Servicio Alimentación). Administrador y Coordinador
+        administrativo ya tienen acceso a todas las encuestas por su rol — se listan igual, marcados como "Acceso
+        total", pero no requieren (ni permiten) asignación individual.
       </p>
       <p className="mb-4 text-xs text-slate-400">
-        Mostrando {usuariosFiltrados.length} de {usuarios.length} usuario{usuarios.length === 1 ? '' : 's'} asignable
-        {usuarios.length === 1 ? '' : 's'}.
+        Mostrando {usuariosFiltrados.length} de {usuarios.length} usuario{usuarios.length === 1 ? '' : 's'} en total.
       </p>
 
       <div className="mb-4 w-72">
@@ -152,26 +150,32 @@ export default function Asignaciones() {
                         {u.email} · {ROL_LABEL[u.role]}
                       </div>
                     </td>
-                    {encuestasOrdenadas.map((e) => {
-                      const aplica = rolAsignableDeEncuesta(e) === u.role
-                      const clave = `${u.id}:${e.id}`
-                      const marcada = asignadas.has(clave)
-                      return (
-                        <td key={e.id} className="px-2 py-2 text-center">
-                          {aplica ? (
-                            <input
-                              type="checkbox"
-                              checked={marcada}
-                              disabled={guardandoClave === clave}
-                              onChange={() => alternar(u, e)}
-                              className="h-4 w-4 accent-[var(--azul)] disabled:opacity-50"
-                            />
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                      )
-                    })}
+                    {tieneAccesoTotal(u) ? (
+                      <td colSpan={encuestasOrdenadas.length} className="px-2 py-2 text-center">
+                        <Badge tono="verde">Acceso total — {ROL_LABEL[u.role]}</Badge>
+                      </td>
+                    ) : (
+                      encuestasOrdenadas.map((e) => {
+                        const aplica = rolAsignableDeEncuesta(e) === u.role
+                        const clave = `${u.id}:${e.id}`
+                        const marcada = asignadas.has(clave)
+                        return (
+                          <td key={e.id} className="px-2 py-2 text-center">
+                            {aplica ? (
+                              <input
+                                type="checkbox"
+                                checked={marcada}
+                                disabled={guardandoClave === clave}
+                                onChange={() => alternar(u, e)}
+                                className="h-4 w-4 accent-[var(--azul)] disabled:opacity-50"
+                              />
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </td>
+                        )
+                      })
+                    )}
                   </tr>
                 ))}
                 {usuariosFiltrados.length === 0 && (
@@ -221,12 +225,16 @@ export default function Asignaciones() {
           <h2 className="mb-3 font-semibold text-[var(--azul)]">Consultar encuestas de un usuario</h2>
           <Select value={consultaUsuarioId} onChange={(e) => setConsultaUsuarioId(e.target.value)} className="mb-3">
             <option value="">Selecciona un usuario…</option>
-            {usuarios.map((u) => (
+            {usuariosAsignables.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.nombre} — {u.email}
               </option>
             ))}
           </Select>
+          <p className="mb-3 text-xs text-slate-400">
+            Solo se listan usuarios con asignación individual (Encuestado/Orientador). Administrador y Coordinador
+            administrativo tienen acceso total, no asignaciones puntuales.
+          </p>
           {consultaUsuarioId !== '' && (
             <ul className="flex flex-col gap-2">
               {encuestasDeUsuarioConsultado.map((e) => (

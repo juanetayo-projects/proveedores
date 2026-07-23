@@ -8,14 +8,14 @@ import type { Database } from '../lib/database.types'
 type Encuesta = Database['public']['Tables']['encuestas']['Row']
 type Profile = Database['public']['Tables']['profiles']['Row']
 
-type Item = { encuesta: Encuesta; diligenciada: boolean; ultimaFecha: string | null }
-type Fila = { usuario: Profile; items: Item[]; realizadas: number; pendientes: number }
+type Item = { encuesta: Encuesta; diligenciada: boolean; cantidad: number; ultimaFecha: string | null }
+type Fila = { usuario: Profile; items: Item[]; totalRespuestas: number; pendientes: number }
 
 export default function EstadoEncuestas() {
   const [usuarios, setUsuarios] = useState<Profile[]>([])
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [asignaciones, setAsignaciones] = useState<Map<string, number[]>>(new Map())
-  const [diligenciadas, setDiligenciadas] = useState<Map<string, string>>(new Map())
+  const [conteos, setConteos] = useState<Map<string, { cantidad: number; ultimaFecha: string }>>(new Map())
   const [totalRealizadas, setTotalRealizadas] = useState(0)
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
@@ -50,13 +50,18 @@ export default function EstadoEncuestas() {
     if (desde) q = q.gte('fecha_respuesta', desde)
     if (hasta) q = q.lte('fecha_respuesta', hasta)
     const { data: resp } = await q
-    const mapaDiligenciadas = new Map<string, string>()
+    const mapaConteos = new Map<string, { cantidad: number; ultimaFecha: string }>()
     for (const r of resp ?? []) {
       const clave = `${r.respondido_por}:${r.encuesta_id}`
-      const actual = mapaDiligenciadas.get(clave)
-      if (!actual || r.fecha_respuesta > actual) mapaDiligenciadas.set(clave, r.fecha_respuesta)
+      const actual = mapaConteos.get(clave)
+      if (actual) {
+        actual.cantidad++
+        if (r.fecha_respuesta > actual.ultimaFecha) actual.ultimaFecha = r.fecha_respuesta
+      } else {
+        mapaConteos.set(clave, { cantidad: 1, ultimaFecha: r.fecha_respuesta })
+      }
     }
-    setDiligenciadas(mapaDiligenciadas)
+    setConteos(mapaConteos)
     setTotalRealizadas(resp?.length ?? 0)
     setCargando(false)
   }
@@ -78,19 +83,19 @@ export default function EstadoEncuestas() {
         .filter((e): e is Encuesta => !!e)
         .map((encuesta) => {
           const clave = `${usuario.id}:${encuesta.id}`
-          const ultimaFecha = diligenciadas.get(clave) ?? null
-          return { encuesta, diligenciada: !!ultimaFecha, ultimaFecha }
+          const conteo = conteos.get(clave)
+          return { encuesta, diligenciada: !!conteo, cantidad: conteo?.cantidad ?? 0, ultimaFecha: conteo?.ultimaFecha ?? null }
         })
-      const realizadas = todosLosItems.filter((i) => i.diligenciada).length
-      const pendientes = todosLosItems.length - realizadas
+      const totalRespuestas = todosLosItems.reduce((acc, i) => acc + i.cantidad, 0)
+      const pendientes = todosLosItems.filter((i) => !i.diligenciada).length
       let items = todosLosItems
       if (estado === 'diligenciadas') items = items.filter((i) => i.diligenciada)
       if (estado === 'pendientes') items = items.filter((i) => !i.diligenciada)
       if (items.length === 0) continue
-      resultado.push({ usuario, items, realizadas, pendientes })
+      resultado.push({ usuario, items, totalRespuestas, pendientes })
     }
     return resultado
-  }, [usuarios, encuestas, asignaciones, diligenciadas, busqueda, estado])
+  }, [usuarios, encuestas, asignaciones, conteos, busqueda, estado])
 
   return (
     <div>
@@ -136,21 +141,21 @@ export default function EstadoEncuestas() {
           <p className="text-sm text-slate-500">Cargando…</p>
         ) : (
           <div className="flex flex-col gap-4">
-            {filas.map(({ usuario, items, realizadas, pendientes }) => (
+            {filas.map(({ usuario, items, totalRespuestas, pendientes }) => (
               <div key={usuario.id} className="neu-pressed p-3">
                 <div className="mb-2 flex flex-wrap items-center gap-2 text-sm font-medium text-slate-700">
                   <span>
                     {usuario.nombre} <span className="text-xs font-normal text-slate-500">· {ROL_LABEL[usuario.role]}</span>
                   </span>
                   <span className="rounded-full bg-emerald-600/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                    {realizadas} realizada{realizadas === 1 ? '' : 's'}
+                    {totalRespuestas} realizada{totalRespuestas === 1 ? '' : 's'}
                   </span>
                   <span className="rounded-full bg-rose-600/10 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
-                    {pendientes} pendiente{pendientes === 1 ? '' : 's'}
+                    {pendientes} encuesta{pendientes === 1 ? '' : 's'} sin diligenciar
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {items.map(({ encuesta, diligenciada, ultimaFecha }) => (
+                  {items.map(({ encuesta, diligenciada, cantidad, ultimaFecha }) => (
                     <span
                       key={encuesta.id}
                       title={diligenciada ? `Último registro: ${ultimaFecha}` : 'Sin registrar en el período'}
@@ -158,7 +163,7 @@ export default function EstadoEncuestas() {
                         diligenciada ? 'bg-emerald-600' : 'bg-rose-600'
                       }`}
                     >
-                      {encuesta.proveedor ?? encuesta.nombre} · {diligenciada ? 'Diligenciada' : 'Pendiente'}
+                      {encuesta.proveedor ?? encuesta.nombre} · {diligenciada ? `${cantidad} realizada${cantidad === 1 ? '' : 's'}` : 'Pendiente'}
                     </span>
                   ))}
                 </div>
