@@ -1,5 +1,24 @@
 import { supabase } from './supabase'
 
+/** `supabase.functions.invoke` no expone el cuerpo JSON de una respuesta no-2xx en
+ * `error.message` (queda genérico: "Edge Function returned a non-2xx status code").
+ * El body real ({ error: "..." }) que devuelve `admin-usuarios` viaja en
+ * `error.context` (el Response crudo); hay que leerlo aparte. */
+export async function mensajeErrorFuncion(error: unknown, data: unknown): Promise<string> {
+  const dataError = (data as { error?: string } | null)?.error
+  if (dataError) return dataError
+  const contexto = (error as { context?: Response } | null)?.context
+  if (contexto && typeof contexto.json === 'function') {
+    try {
+      const body = await contexto.clone().json()
+      if (body?.error) return body.error as string
+    } catch {
+      // el body no era JSON; se ignora y se usa el mensaje genérico
+    }
+  }
+  return error instanceof Error ? error.message : 'Error desconocido'
+}
+
 /** El proyecto de Supabase limita cada respuesta de la API a 1000 filas sin importar
  * el .limit() pedido (tope de PostgREST a nivel de proyecto). Para consultas que puedan
  * superar eso, paginar con .range() hasta traer todas las filas. */

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { listarAreas, listarEncuestas } from '../../lib/data'
+import { listarAreas, listarEncuestas, mensajeErrorFuncion } from '../../lib/data'
 import { PageHeader, Card, Boton, Input, Select, Modal } from '../../components/ui'
 import { ROL_LABEL } from '../../lib/constantes'
 import type { Database } from '../../lib/database.types'
@@ -64,7 +64,7 @@ export default function Usuarios() {
     setGuardando(true)
     try {
       if (editando) {
-        const { error: err } = await supabase.functions.invoke('admin-usuarios', {
+        const { error: err, data: dataAct } = await supabase.functions.invoke('admin-usuarios', {
           body: {
             accion: 'actualizar',
             id: editando.id,
@@ -75,12 +75,12 @@ export default function Usuarios() {
             activo: editando.activo,
           },
         })
-        if (err) throw err
+        if (err || dataAct?.error) throw new Error(await mensajeErrorFuncion(err, dataAct))
         if (form.password) {
-          const { error: errPw } = await supabase.functions.invoke('admin-usuarios', {
+          const { error: errPw, data: dataPw } = await supabase.functions.invoke('admin-usuarios', {
             body: { accion: 'reset', id: editando.id, password: form.password },
           })
-          if (errPw) throw errPw
+          if (errPw || dataPw?.error) throw new Error(await mensajeErrorFuncion(errPw, dataPw))
         }
       } else {
         const { error: err, data } = await supabase.functions.invoke('admin-usuarios', {
@@ -94,8 +94,7 @@ export default function Usuarios() {
             area_servicio_id: form.area_servicio_id || null,
           },
         })
-        if (err) throw err
-        if (data?.error) throw new Error(data.error)
+        if (err || data?.error) throw new Error(await mensajeErrorFuncion(err, data))
         if (form.role === 'encuestado' && data?.id) {
           const encuestas = await listarEncuestas()
           const proveedor = encuestas.filter((e) => e.tipo === 'proveedor')
@@ -146,6 +145,8 @@ export default function Usuarios() {
     const { leerExcel } = await import('../../lib/exportar')
     const filas = await leerExcel(file)
     const encuestasProveedor = (await listarEncuestas()).filter((e) => e.tipo === 'proveedor')
+    const usernamesVistos = new Set(usuarios.map((u) => u.username.toLowerCase()))
+    const emailsVistos = new Set(usuarios.map((u) => u.email.toLowerCase()))
     let creados = 0
     const errores: string[] = []
     for (const f of filas) {
@@ -170,13 +171,23 @@ export default function Usuarios() {
         errores.push(`${etiqueta}: área "${areaTexto}" no encontrada en el catálogo`)
         continue
       }
+      if (usernamesVistos.has(username.toLowerCase())) {
+        errores.push(`${etiqueta}: el usuario "${username}" ya existe (cuenta existente o fila duplicada en el archivo)`)
+        continue
+      }
+      if (emailsVistos.has(email.toLowerCase())) {
+        errores.push(`${etiqueta}: el correo "${email}" ya está registrado (cuenta existente o fila duplicada en el archivo)`)
+        continue
+      }
       const { error, data } = await supabase.functions.invoke('admin-usuarios', {
         body: { accion: 'crear', email, username, password, nombre, role, area_servicio_id: area?.id ?? null },
       })
       if (error || data?.error) {
-        errores.push(`${etiqueta}: ${data?.error ?? error?.message ?? 'error desconocido'}`)
+        errores.push(`${etiqueta}: ${await mensajeErrorFuncion(error, data)}`)
         continue
       }
+      usernamesVistos.add(username.toLowerCase())
+      emailsVistos.add(email.toLowerCase())
       if (role === 'encuestado' && data?.id && encuestasProveedor.length > 0) {
         await supabase
           .from('asignaciones_encuestado')
@@ -190,15 +201,23 @@ export default function Usuarios() {
   }
 
   async function alternarActivo(u: Profile) {
-    await supabase.functions.invoke('admin-usuarios', {
+    const { error, data } = await supabase.functions.invoke('admin-usuarios', {
       body: { accion: 'actualizar', id: u.id, nombre: u.nombre, role: u.role, area_servicio_id: u.area_servicio_id, activo: !u.activo },
     })
+    if (error || data?.error) {
+      alert(`No se pudo actualizar el estado: ${await mensajeErrorFuncion(error, data)}`)
+      return
+    }
     cargar()
   }
 
   async function eliminar(u: Profile) {
     if (!confirm(`¿Eliminar a ${u.nombre}? Esta acción no se puede deshacer.`)) return
-    await supabase.functions.invoke('admin-usuarios', { body: { accion: 'eliminar', id: u.id } })
+    const { error, data } = await supabase.functions.invoke('admin-usuarios', { body: { accion: 'eliminar', id: u.id } })
+    if (error || data?.error) {
+      alert(`No se pudo eliminar: ${await mensajeErrorFuncion(error, data)}`)
+      return
+    }
     cargar()
   }
 
