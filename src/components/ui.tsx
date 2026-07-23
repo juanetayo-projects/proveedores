@@ -125,23 +125,21 @@ export function PopoverRespuestas({ popover, onClose }: { popover: PopoverQA; on
             popover.filas.map((d, i) => {
               const color = colorDeValor(d.tipoRespuesta, d.valor)
               return (
-                <div key={i} className="neu-pressed mb-2 p-2 text-[11px] last:mb-0">
-                  <div className="mb-1 flex items-start gap-2 font-medium text-slate-600">
-                    <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--azul)] text-[9px] font-bold text-white">
-                      {i + 1}
+                <div key={i} className="neu-pressed mb-2 flex items-start gap-2 p-2 text-[11px] last:mb-0">
+                  <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--azul)] text-[9px] font-bold text-white">
+                    {i + 1}
+                  </span>
+                  {color ? (
+                    <span
+                      className="mt-px inline-block shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                      style={{ background: color }}
+                    >
+                      {d.valor}
                     </span>
-                    {color ? (
-                      <span
-                        className="mt-px inline-block shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
-                        style={{ background: color }}
-                      >
-                        {d.valor}
-                      </span>
-                    ) : (
-                      <span className="mt-px shrink-0 font-medium text-slate-800">{d.valor}</span>
-                    )}
-                  </div>
-                  <div className="ml-6 text-slate-700">{d.pregunta}</div>
+                  ) : (
+                    <span className="mt-px shrink-0 font-medium text-slate-800">{d.valor}</span>
+                  )}
+                  <span className="font-medium text-slate-700">{d.pregunta}</span>
                 </div>
               )
             })}

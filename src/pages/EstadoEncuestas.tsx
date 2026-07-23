@@ -9,7 +9,7 @@ type Encuesta = Database['public']['Tables']['encuestas']['Row']
 type Profile = Database['public']['Tables']['profiles']['Row']
 
 type Item = { encuesta: Encuesta; diligenciada: boolean; ultimaFecha: string | null }
-type Fila = { usuario: Profile; items: Item[] }
+type Fila = { usuario: Profile; items: Item[]; realizadas: number; pendientes: number }
 
 export default function EstadoEncuestas() {
   const [usuarios, setUsuarios] = useState<Profile[]>([])
@@ -73,7 +73,7 @@ export default function EstadoEncuestas() {
       if (q && !usuario.nombre.toLowerCase().includes(q) && !usuario.email.toLowerCase().includes(q)) continue
       const encuestaIds = asignaciones.get(usuario.id) ?? []
       if (encuestaIds.length === 0) continue
-      let items: Item[] = encuestaIds
+      const todosLosItems: Item[] = encuestaIds
         .map((id) => encuestas.find((e) => e.id === id))
         .filter((e): e is Encuesta => !!e)
         .map((encuesta) => {
@@ -81,10 +81,13 @@ export default function EstadoEncuestas() {
           const ultimaFecha = diligenciadas.get(clave) ?? null
           return { encuesta, diligenciada: !!ultimaFecha, ultimaFecha }
         })
+      const realizadas = todosLosItems.filter((i) => i.diligenciada).length
+      const pendientes = todosLosItems.length - realizadas
+      let items = todosLosItems
       if (estado === 'diligenciadas') items = items.filter((i) => i.diligenciada)
       if (estado === 'pendientes') items = items.filter((i) => !i.diligenciada)
       if (items.length === 0) continue
-      resultado.push({ usuario, items })
+      resultado.push({ usuario, items, realizadas, pendientes })
     }
     return resultado
   }, [usuarios, encuestas, asignaciones, diligenciadas, busqueda, estado])
@@ -133,10 +136,18 @@ export default function EstadoEncuestas() {
           <p className="text-sm text-slate-500">Cargando…</p>
         ) : (
           <div className="flex flex-col gap-4">
-            {filas.map(({ usuario, items }) => (
+            {filas.map(({ usuario, items, realizadas, pendientes }) => (
               <div key={usuario.id} className="neu-pressed p-3">
-                <div className="mb-2 text-sm font-medium text-slate-700">
-                  {usuario.nombre} <span className="text-xs font-normal text-slate-500">· {ROL_LABEL[usuario.role]}</span>
+                <div className="mb-2 flex flex-wrap items-center gap-2 text-sm font-medium text-slate-700">
+                  <span>
+                    {usuario.nombre} <span className="text-xs font-normal text-slate-500">· {ROL_LABEL[usuario.role]}</span>
+                  </span>
+                  <span className="rounded-full bg-emerald-600/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                    {realizadas} realizada{realizadas === 1 ? '' : 's'}
+                  </span>
+                  <span className="rounded-full bg-rose-600/10 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
+                    {pendientes} pendiente{pendientes === 1 ? '' : 's'}
+                  </span>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {items.map(({ encuesta, diligenciada, ultimaFecha }) => (

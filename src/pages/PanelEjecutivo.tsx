@@ -38,7 +38,6 @@ type DetalleFila = {
 
 type CategoriaFila = { categoria: string; categoriaAreaId: number | null; cantidad: number }
 type PreguntaProm = { pregunta_id: number; texto: string; orden: number; promedio: number | null; escalaMax: number }
-type MesFila = { mes: string; pct: number; total: number }
 
 function AnilloSimple({
   pct,
@@ -83,10 +82,40 @@ function iniciales(nombre: string | null): string {
   return ((partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? '')).toUpperCase() || '?'
 }
 
-function formatearMes(mes: string): string {
-  const [anio, m] = mes.split('-')
-  const nombres = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
-  return `${nombres[Number(m) - 1] ?? m} ${anio}`
+/** Gráfico tipo velocímetro/reloj: aguja sobre un semicírculo con 3 zonas de
+ * color, para el % de satisfacción del período filtrado. */
+function Velocimetro({ pct, tamano = 200 }: { pct: number; tamano?: number }) {
+  const cx = tamano / 2
+  const cy = tamano / 2 + 6
+  const r = tamano / 2 - 22
+  const clamped = Math.max(0, Math.min(100, pct))
+  const anguloAguja = -180 + (clamped / 100) * 180
+  const radAguja = (anguloAguja * Math.PI) / 180
+  const agujaX = cx + r * 0.82 * Math.cos(radAguja)
+  const agujaY = cy + r * 0.82 * Math.sin(radAguja)
+
+  function arco(desdePct: number, hastaPct: number) {
+    const a1 = ((-180 + (desdePct / 100) * 180) * Math.PI) / 180
+    const a2 = ((-180 + (hastaPct / 100) * 180) * Math.PI) / 180
+    const x1 = cx + r * Math.cos(a1)
+    const y1 = cy + r * Math.sin(a1)
+    const x2 = cx + r * Math.cos(a2)
+    const y2 = cy + r * Math.sin(a2)
+    return `M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`
+  }
+
+  return (
+    <svg width={tamano} height={tamano / 2 + 26} viewBox={`0 0 ${tamano} ${tamano / 2 + 26}`}>
+      <path d={arco(0, 50)} stroke="#dc2626" strokeWidth={16} fill="none" />
+      <path d={arco(50, 75)} stroke="#d97706" strokeWidth={16} fill="none" />
+      <path d={arco(75, 100)} stroke="#16a34a" strokeWidth={16} fill="none" />
+      <line x1={cx} y1={cy} x2={agujaX} y2={agujaY} stroke="#0D2D6B" strokeWidth={3} strokeLinecap="round" />
+      <circle cx={cx} cy={cy} r={6} fill="#0D2D6B" />
+      <text x={cx} y={cy - 14} textAnchor="middle" fontSize="22" fontWeight="bold" fill="#0D2D6B">
+        {clamped.toFixed(0)}%
+      </text>
+    </svg>
+  )
 }
 
 type PopoverState = { x: number; y: number; titulo: string; filas: DetalleFila[]; cargando: boolean } | null
@@ -187,7 +216,6 @@ export default function PanelEjecutivo() {
   const [porCategoria, setPorCategoria] = useState<CategoriaFila[]>([])
   const [conteoDiario, setConteoDiario] = useState<{ dia: string; cantidad: number }[]>([])
   const [promedioPregunta, setPromedioPregunta] = useState<PreguntaProm[]>([])
-  const [tendenciaMensual, setTendenciaMensual] = useState<MesFila[]>([])
   const [popover, setPopover] = useState<PopoverState>(null)
   const cargaVigenteRef = useRef(0)
 
@@ -214,12 +242,11 @@ export default function PanelEjecutivo() {
     const miCarga = ++cargaVigenteRef.current
     setCargando(true)
     const params = { p_encuesta_id: encuestaId, p_desde: desde || undefined, p_hasta: hasta || undefined }
-    const [{ data: dist }, { data: cat }, { data: dia }, { data: prom }, { data: mes }] = await Promise.all([
+    const [{ data: dist }, { data: cat }, { data: dia }, { data: prom }] = await Promise.all([
       supabase.rpc('panel_distribucion', params),
       supabase.rpc('panel_por_categoria', params),
       supabase.rpc('panel_conteo_diario', params),
       supabase.rpc('panel_promedio_pregunta', params),
-      supabase.rpc('panel_tendencia_mensual', params),
     ])
     if (cargaVigenteRef.current !== miCarga) return
     setConteoValores(new Map((dist ?? []).map((d: any) => [String(d.valor), Number(d.cantidad)])))
@@ -240,7 +267,6 @@ export default function PanelEjecutivo() {
         escalaMax: Number(p.escala_max),
       })),
     )
-    setTendenciaMensual((mes ?? []).map((m: any) => ({ mes: m.mes, pct: Number(m.pct), total: Number(m.total) })))
     setCargando(false)
   }
 
@@ -444,7 +470,7 @@ export default function PanelEjecutivo() {
             <ResponsiveContainer width="100%" height={Math.max(160, promedioPregunta.length * 34)}>
               <BarChart data={promedioPregunta} layout="vertical" margin={{ left: 10 }}>
                 <XAxis type="number" domain={[0, promedioPregunta[0]?.escalaMax ?? 4]} allowDecimals={false} />
-                <YAxis type="category" dataKey="orden" width={70} tick={{ fontSize: 11 }} tickFormatter={(v) => `Pregunta ${v}`} />
+                <YAxis type="category" dataKey="orden" width={92} tick={{ fontSize: 10 }} tickFormatter={(v) => `Pregunta ${v}`} />
                 <RTooltip
                   formatter={(v) => Number(v).toFixed(2)}
                   labelFormatter={(orden) => promedioPregunta.find((p) => p.orden === orden)?.texto ?? `Pregunta ${orden}`}
@@ -460,22 +486,21 @@ export default function PanelEjecutivo() {
           </p>
         </Card>
 
-        <Card>
-          <h2 className="mb-4 font-semibold text-[var(--azul)]">Tendencia mensual de satisfacción</h2>
-          {tendenciaMensual.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={tendenciaMensual} margin={{ bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#c3cbe0" />
-                <XAxis dataKey="mes" tickFormatter={formatearMes} tick={{ fontSize: 9 }} angle={-40} textAnchor="end" height={40} />
-                <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={30} />
-                <RTooltip formatter={(v) => `${Number(v).toFixed(1)}%`} labelFormatter={(mes) => formatearMes(String(mes))} />
-                <Line type="monotone" dataKey="pct" stroke="#16a34a" strokeWidth={2} dot={{ r: 2 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-sm text-slate-500">Sin datos suficientes.</p>
-          )}
-          <p className="mt-1 text-[10px] text-slate-400">% de respuestas positivas por mes</p>
+        <Card className="flex flex-col items-center">
+          <h2 className="mb-2 self-start font-semibold text-[var(--azul)]">Nivel de satisfacción</h2>
+          <Velocimetro pct={pctSatisfaccion} />
+          <div className="mt-2 flex gap-3 text-[10px] text-slate-500">
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-rose-600" /> 0-50
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-amber-500" /> 50-75
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="h-2 w-2 rounded-full bg-emerald-600" /> 75-100
+            </span>
+          </div>
+          <p className="mt-1 text-[10px] text-slate-400">% de satisfacción del período filtrado</p>
         </Card>
       </div>
 
