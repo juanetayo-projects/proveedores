@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { listarEncuestas, listarDetalleRespuesta, listarPreguntas, paginarTodo, formatearFechaHora } from '../lib/data'
-import { PageHeader, Card, FilterBar, Select, Input, Boton, PopoverRespuestas, calcularPosicionPopover, type PopoverQA } from '../components/ui'
+import { PageHeader, Card, FilterBar, Select, Input, Boton, Badge, PopoverRespuestas, calcularPosicionPopover, type PopoverQA } from '../components/ui'
 import { colorDeValor } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
@@ -26,6 +26,7 @@ export default function Reportes() {
   const [filas, setFilas] = useState<Fila[]>([])
   const [cargando, setCargando] = useState(false)
   const [popover, setPopover] = useState<PopoverQA>(null)
+  const [pctSatisfaccion, setPctSatisfaccion] = useState<number | null>(null)
 
   useEffect(() => {
     listarEncuestas().then((es) => {
@@ -53,7 +54,10 @@ export default function Reportes() {
       .limit(1000)
     if (desde) q = q.gte('fecha_respuesta', desde)
     if (hasta) q = q.lte('fecha_respuesta', hasta)
-    const { data } = await q
+    const [{ data }, { data: dist }] = await Promise.all([
+      q,
+      supabase.rpc('panel_distribucion', { p_encuesta_id: encuestaId, p_desde: desde || undefined, p_hasta: hasta || undefined }),
+    ])
     setFilas(
       (data ?? []).map((r) => ({
         id: r.id,
@@ -66,6 +70,11 @@ export default function Reportes() {
         paciente_numero_habitacion: r.paciente_numero_habitacion,
       })),
     )
+    const esPaciente = encuestas.find((e) => e.id === encuestaId)?.tipo === 'paciente'
+    const esPositivo = (valor: string) => (esPaciente ? Number(valor) >= 4 : valor === 'Excelente' || valor === 'Bueno')
+    const total = (dist ?? []).reduce((acc, d) => acc + Number(d.cantidad), 0)
+    const positivos = (dist ?? []).filter((d) => esPositivo(d.valor)).reduce((acc, d) => acc + Number(d.cantidad), 0)
+    setPctSatisfaccion(total > 0 ? (positivos / total) * 100 : null)
     setCargando(false)
   }
 
@@ -180,6 +189,11 @@ export default function Reportes() {
         titulo="Reportes"
         acciones={
           <>
+            {pctSatisfaccion !== null && (
+              <Badge tono={pctSatisfaccion >= 80 ? 'verde' : pctSatisfaccion >= 60 ? 'ambar' : 'rojo'}>
+                {pctSatisfaccion.toFixed(0)}% de satisfacción
+              </Badge>
+            )}
             <Boton variant="secundario" onClick={exportarExcel}>
               Exportar Excel
             </Boton>

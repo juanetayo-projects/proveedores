@@ -130,18 +130,18 @@ export function PopoverRespuestas({ popover, onClose }: { popover: PopoverQA; on
                     <span className="mt-px flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--azul)] text-[9px] font-bold text-white">
                       {i + 1}
                     </span>
-                    <span>{d.pregunta}</span>
+                    {color ? (
+                      <span
+                        className="mt-px inline-block shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
+                        style={{ background: color }}
+                      >
+                        {d.valor}
+                      </span>
+                    ) : (
+                      <span className="mt-px shrink-0 font-medium text-slate-800">{d.valor}</span>
+                    )}
                   </div>
-                  {color ? (
-                    <span
-                      className="ml-6 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
-                      style={{ background: color }}
-                    >
-                      {d.valor}
-                    </span>
-                  ) : (
-                    <div className="ml-6 font-medium text-slate-800">{d.valor}</div>
-                  )}
+                  <div className="ml-6 text-slate-700">{d.pregunta}</div>
                 </div>
               )
             })}

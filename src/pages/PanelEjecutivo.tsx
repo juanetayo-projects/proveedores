@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
 import { PageHeader, Card, FilterBar, Select, Input, Boton } from '../components/ui'
@@ -15,16 +15,30 @@ const DESCRIPCION_ESCALA_4: Record<string, string> = {
   Deficiente: 'No cumple lo esperado',
 }
 
+function primerDiaDelMes(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+function hoyISO(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 type DetalleFila = {
   valor: string
   pregunta_texto: string
+  pregunta_orden: number
   fecha_respuesta: string
   paciente_nombre: string | null
+  evaluado: string | null
   servicio: string | null
   respondido_por_nombre: string | null
 }
 
 type CategoriaFila = { categoria: string; categoriaAreaId: number | null; cantidad: number }
+type PreguntaProm = { pregunta_id: number; texto: string; orden: number; promedio: number | null; escalaMax: number }
+type MesFila = { mes: string; pct: number; total: number }
 
 function AnilloSimple({
   pct,
@@ -63,14 +77,29 @@ function AnilloSimple({
   )
 }
 
+function iniciales(nombre: string | null): string {
+  if (!nombre) return '?'
+  const partes = nombre.trim().split(/\s+/)
+  return ((partes[0]?.[0] ?? '') + (partes[1]?.[0] ?? '')).toUpperCase() || '?'
+}
+
+function formatearMes(mes: string): string {
+  const [anio, m] = mes.split('-')
+  const nombres = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
+  return `${nombres[Number(m) - 1] ?? m} ${anio}`
+}
+
 type PopoverState = { x: number; y: number; titulo: string; filas: DetalleFila[]; cargando: boolean } | null
 
 function posicionPopover(e: { clientX?: number; clientY?: number } | undefined) {
   const cx = e?.clientX ?? window.innerWidth / 2
   const cy = e?.clientY ?? window.innerHeight / 2
-  return { x: Math.max(8, Math.min(cx, window.innerWidth - 340)), y: Math.max(8, Math.min(cy, window.innerHeight - 320)) }
+  return { x: Math.max(8, Math.min(cx, window.innerWidth - 360)), y: Math.max(8, Math.min(cy, window.innerHeight - 340)) }
 }
 
+/** Tarjetas de detalle con diseño tipo Odoo: fila de "chatter" (avatar + quién
+ * + cuándo), etiquetas grises de contexto, y el valor de la calificación
+ * antes de la pregunta (no debajo). */
 function PopoverDetalle({
   popover,
   onClose,
@@ -84,7 +113,7 @@ function PopoverDetalle({
   return (
     <div className="fixed inset-0 z-40" onClick={onClose}>
       <div
-        className="neu-flat fixed z-50 w-80 overflow-hidden p-0"
+        className="fixed z-50 w-96 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl"
         style={{ left: popover.x, top: popover.y }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -94,26 +123,48 @@ function PopoverDetalle({
             ✕
           </button>
         </div>
-        <div className="max-h-72 overflow-y-auto p-3">
+        <div className="max-h-80 overflow-y-auto p-2">
           {popover.cargando && <p className="py-2 text-center text-xs text-slate-400">Cargando…</p>}
           {!popover.cargando &&
             popover.filas.map((f, i) => (
-              <div key={i} className="neu-pressed mb-2 p-2 text-[11px] last:mb-0">
-                <div className="mb-1 flex flex-wrap justify-between gap-x-2 text-slate-500">
-                  <span>{f.fecha_respuesta}</span>
-                  <span>{f.respondido_por_nombre ?? '—'}</span>
-                </div>
-                {(f.paciente_nombre || f.servicio) && (
-                  <div className="mb-1 text-slate-500">{f.paciente_nombre ?? f.servicio}</div>
-                )}
-                <div className="flex items-start gap-2">
-                  <span
-                    className="mt-px shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
-                    style={{ background: colorEscala[f.valor] ?? '#64748b' }}
-                  >
-                    {f.valor}
+              <div key={i} className="mb-2 rounded-lg border border-slate-100 bg-slate-50/60 p-2.5 text-[11px] last:mb-0">
+                <div className="mb-1.5 flex items-center gap-2">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--azul)] text-[10px] font-bold text-white">
+                    {iniciales(f.respondido_por_nombre)}
                   </span>
-                  <span className="font-medium text-slate-800">{f.pregunta_texto}</span>
+                  <span className="flex-1 font-medium text-slate-700">{f.respondido_por_nombre ?? 'Sin registrar'}</span>
+                  <span className="shrink-0 text-slate-400">{f.fecha_respuesta}</span>
+                </div>
+                {(f.paciente_nombre || f.evaluado || f.servicio) && (
+                  <div className="mb-1.5 flex flex-wrap gap-1">
+                    {f.paciente_nombre && (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-600">
+                        Paciente: {f.paciente_nombre}
+                      </span>
+                    )}
+                    {f.evaluado && (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-600">
+                        Evaluado: {f.evaluado}
+                      </span>
+                    )}
+                    {f.servicio && (
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] text-slate-600">{f.servicio}</span>
+                    )}
+                  </div>
+                )}
+                <div className="rounded-md bg-white p-2">
+                  <div className="mb-1 flex items-center gap-1.5">
+                    <span
+                      className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold text-white"
+                      style={{ background: colorEscala[f.valor] ?? '#64748b' }}
+                    >
+                      {f.valor}
+                    </span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                      Pregunta {f.pregunta_orden}
+                    </span>
+                  </div>
+                  <span className="text-slate-700">{f.pregunta_texto}</span>
                 </div>
               </div>
             ))}
@@ -129,12 +180,14 @@ function PopoverDetalle({
 export default function PanelEjecutivo() {
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [encuestaId, setEncuestaId] = useState<number | ''>('')
-  const [desde, setDesde] = useState('')
-  const [hasta, setHasta] = useState('')
+  const [desde, setDesde] = useState(primerDiaDelMes())
+  const [hasta, setHasta] = useState(hoyISO())
   const [cargando, setCargando] = useState(false)
   const [conteoValores, setConteoValores] = useState<Map<string, number>>(new Map())
   const [porCategoria, setPorCategoria] = useState<CategoriaFila[]>([])
   const [conteoDiario, setConteoDiario] = useState<{ dia: string; cantidad: number }[]>([])
+  const [promedioPregunta, setPromedioPregunta] = useState<PreguntaProm[]>([])
+  const [tendenciaMensual, setTendenciaMensual] = useState<MesFila[]>([])
   const [popover, setPopover] = useState<PopoverState>(null)
   const cargaVigenteRef = useRef(0)
 
@@ -151,20 +204,22 @@ export default function PanelEjecutivo() {
   const colorEscala: Record<string, string> = esPaciente ? ESCALA_1_5_COLOR : ESCALA_4_COLOR
   const esPositivo = (valor: string) => (esPaciente ? Number(valor) >= 4 : valor === 'Excelente' || valor === 'Bueno')
 
-  /** Las 3 gráficas se agregan del lado del servidor (funciones panel_distribucion /
-   * panel_por_categoria / panel_conteo_diario, ver migración 0009) en vez de traer
-   * todo `respuestas_detalle` paginado al cliente — eso tomaba 15-30s en encuestas
-   * de alto volumen (Alimentación). El detalle fila-por-fila solo se consulta bajo
-   * demanda al abrir un popover (ver cargarDetalle500). */
+  /** Las 5 gráficas se agregan del lado del servidor (funciones panel_* de las
+   * migraciones 0009/0010) en vez de traer todo `respuestas_detalle` paginado
+   * al cliente — eso tomaba 15-30s en encuestas de alto volumen (Alimentación).
+   * El detalle fila-por-fila solo se consulta bajo demanda al abrir un popover
+   * (ver cargarDetalle500). */
   async function recargar() {
     if (!encuestaId) return
     const miCarga = ++cargaVigenteRef.current
     setCargando(true)
     const params = { p_encuesta_id: encuestaId, p_desde: desde || undefined, p_hasta: hasta || undefined }
-    const [{ data: dist }, { data: cat }, { data: dia }] = await Promise.all([
+    const [{ data: dist }, { data: cat }, { data: dia }, { data: prom }, { data: mes }] = await Promise.all([
       supabase.rpc('panel_distribucion', params),
       supabase.rpc('panel_por_categoria', params),
       supabase.rpc('panel_conteo_diario', params),
+      supabase.rpc('panel_promedio_pregunta', params),
+      supabase.rpc('panel_tendencia_mensual', params),
     ])
     if (cargaVigenteRef.current !== miCarga) return
     setConteoValores(new Map((dist ?? []).map((d: any) => [String(d.valor), Number(d.cantidad)])))
@@ -176,6 +231,16 @@ export default function PanelEjecutivo() {
       })),
     )
     setConteoDiario((dia ?? []).map((d: any) => ({ dia: d.dia, cantidad: Number(d.cantidad) })))
+    setPromedioPregunta(
+      (prom ?? []).map((p: any) => ({
+        pregunta_id: p.pregunta_id,
+        texto: p.pregunta_texto,
+        orden: p.orden,
+        promedio: p.promedio === null ? null : Number(p.promedio),
+        escalaMax: Number(p.escala_max),
+      })),
+    )
+    setTendenciaMensual((mes ?? []).map((m: any) => ({ mes: m.mes, pct: Number(m.pct), total: Number(m.total) })))
     setCargando(false)
   }
 
@@ -199,7 +264,7 @@ export default function PanelEjecutivo() {
     let q = supabase
       .from('respuestas_detalle')
       .select(
-        `valor, preguntas!inner(texto, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, paciente_nombre, area_servicio_id, paciente_tipo_afiliacion, profiles(nombre), areas_servicio(nombre))`,
+        `valor, preguntas!inner(texto, orden, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, paciente_nombre, identificador_evaluado, area_servicio_id, paciente_tipo_afiliacion, profiles(nombre), areas_servicio(nombre))`,
       )
       .eq('preguntas.tipo_respuesta', paciente ? 'escala_1_5' : 'escala_4')
       .eq('respuestas.encuesta_id', encuestaId)
@@ -217,8 +282,10 @@ export default function PanelEjecutivo() {
       .map((r: any) => ({
         valor: r.valor,
         pregunta_texto: r.preguntas.texto,
+        pregunta_orden: r.preguntas.orden,
         fecha_respuesta: r.respuestas.fecha_respuesta,
-        paciente_nombre: r.respuestas.paciente_nombre ?? null,
+        paciente_nombre: paciente ? (r.respuestas.paciente_nombre ?? null) : null,
+        evaluado: paciente ? null : (r.respuestas.identificador_evaluado ?? null),
         servicio: paciente ? null : (r.respuestas.areas_servicio?.nombre ?? null),
         respondido_por_nombre: r.respuestas.profiles?.nombre ?? null,
       }))
@@ -328,7 +395,7 @@ export default function PanelEjecutivo() {
           <h2 className="mb-3 font-semibold text-[var(--azul)]">Encuestas realizadas por día</h2>
           {conteoDiario.length > 0 ? (
             <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={conteoDiario} margin={{ bottom: 20 }}>
+              <LineChart data={conteoDiario} margin={{ bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#c3cbe0" />
                 <XAxis
                   dataKey="dia"
@@ -340,8 +407,8 @@ export default function PanelEjecutivo() {
                 />
                 <YAxis allowDecimals={false} tick={{ fontSize: 10 }} width={30} />
                 <RTooltip />
-                <Bar dataKey="cantidad" fill="#16468e" radius={[4, 4, 0, 0]} />
-              </BarChart>
+                <Line type="monotone" dataKey="cantidad" stroke="#16468e" strokeWidth={2} dot={false} />
+              </LineChart>
             </ResponsiveContainer>
           ) : (
             <p className="text-sm text-slate-500">Sin datos suficientes.</p>
@@ -350,25 +417,67 @@ export default function PanelEjecutivo() {
         </Card>
       </div>
 
-      <Card>
-        <h2 className="mb-4 font-semibold text-[var(--azul)]">
-          {esPaciente ? 'Respuestas por tipo de afiliación' : 'Respuestas por área/servicio'}
-        </h2>
-        <ResponsiveContainer width="100%" height={Math.max(160, porCategoria.length * 36)}>
-          <BarChart data={porCategoria} layout="vertical" margin={{ left: 40 }}>
-            <XAxis type="number" allowDecimals={false} />
-            <YAxis type="category" dataKey="categoria" width={160} tick={{ fontSize: 11 }} />
-            <RTooltip />
-            <Bar
-              dataKey="cantidad"
-              fill="#16468e"
-              radius={[0, 8, 8, 0]}
-              onClick={(data: any, _i, e) => abrirPopoverCategoria(e, data)}
-              cursor="pointer"
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </Card>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card>
+          <h2 className="mb-4 font-semibold text-[var(--azul)]">
+            {esPaciente ? 'Respuestas por tipo de afiliación' : 'Respuestas por área/servicio'}
+          </h2>
+          <ResponsiveContainer width="100%" height={Math.max(160, porCategoria.length * 36)}>
+            <BarChart data={porCategoria} layout="vertical" margin={{ left: 40 }}>
+              <XAxis type="number" allowDecimals={false} />
+              <YAxis type="category" dataKey="categoria" width={140} tick={{ fontSize: 11 }} />
+              <RTooltip />
+              <Bar
+                dataKey="cantidad"
+                fill="#16468e"
+                radius={[0, 8, 8, 0]}
+                onClick={(data: any, _i, e) => abrirPopoverCategoria(e, data)}
+                cursor="pointer"
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+
+        <Card>
+          <h2 className="mb-4 font-semibold text-[var(--azul)]">Promedio por pregunta</h2>
+          {promedioPregunta.length > 0 ? (
+            <ResponsiveContainer width="100%" height={Math.max(160, promedioPregunta.length * 34)}>
+              <BarChart data={promedioPregunta} layout="vertical" margin={{ left: 10 }}>
+                <XAxis type="number" domain={[0, promedioPregunta[0]?.escalaMax ?? 4]} allowDecimals={false} />
+                <YAxis type="category" dataKey="orden" width={70} tick={{ fontSize: 11 }} tickFormatter={(v) => `Pregunta ${v}`} />
+                <RTooltip
+                  formatter={(v) => Number(v).toFixed(2)}
+                  labelFormatter={(orden) => promedioPregunta.find((p) => p.orden === orden)?.texto ?? `Pregunta ${orden}`}
+                />
+                <Bar dataKey="promedio" fill="#16a34a" radius={[0, 8, 8, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-slate-500">Sin datos suficientes.</p>
+          )}
+          <p className="mt-1 text-[10px] text-slate-400">
+            Calificación promedio de cada pregunta (escala hasta {promedioPregunta[0]?.escalaMax ?? (esPaciente ? 5 : 4)})
+          </p>
+        </Card>
+
+        <Card>
+          <h2 className="mb-4 font-semibold text-[var(--azul)]">Tendencia mensual de satisfacción</h2>
+          {tendenciaMensual.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart data={tendenciaMensual} margin={{ bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#c3cbe0" />
+                <XAxis dataKey="mes" tickFormatter={formatearMes} tick={{ fontSize: 9 }} angle={-40} textAnchor="end" height={40} />
+                <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} width={30} />
+                <RTooltip formatter={(v) => `${Number(v).toFixed(1)}%`} labelFormatter={(mes) => formatearMes(String(mes))} />
+                <Line type="monotone" dataKey="pct" stroke="#16a34a" strokeWidth={2} dot={{ r: 2 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          ) : (
+            <p className="text-sm text-slate-500">Sin datos suficientes.</p>
+          )}
+          <p className="mt-1 text-[10px] text-slate-400">% de respuestas positivas por mes</p>
+        </Card>
+      </div>
 
       <PopoverDetalle popover={popover} onClose={() => setPopover(null)} colorEscala={colorEscala} />
     </div>

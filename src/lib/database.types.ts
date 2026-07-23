@@ -330,6 +330,24 @@ export type Database = {
           categoria_area_id: number
         }[]
       }
+      panel_promedio_pregunta: {
+        Args: { p_desde?: string; p_encuesta_id: number; p_hasta?: string }
+        Returns: {
+          escala_max: number
+          orden: number
+          pregunta_id: number
+          pregunta_texto: string
+          promedio: number
+        }[]
+      }
+      panel_tendencia_mensual: {
+        Args: { p_desde?: string; p_encuesta_id: number; p_hasta?: string }
+        Returns: {
+          mes: string
+          pct: number
+          total: number
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never
