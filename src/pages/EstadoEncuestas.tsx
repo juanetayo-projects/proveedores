@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { listarEncuestas } from '../lib/data'
+import { listarEncuestas, formatearFechaHora } from '../lib/data'
 import { PageHeader, Card, FilterBar, Input, Select, Boton, Badge, calcularPosicionPopover } from '../components/ui'
 import { ROL_LABEL } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
@@ -14,7 +14,7 @@ type Fila = { usuario: Profile; items: Item[]; totalRespuestas: number; pendient
 type RespuestaFila = {
   id: number
   encuestaNombre: string
-  fecha_respuesta: string
+  fechaHora: string
   detalle: string | null
 }
 
@@ -59,9 +59,9 @@ export default function EstadoEncuestas() {
     const ids = (perfiles ?? []).map((u) => u.id)
     let q = supabase
       .from('respuestas')
-      .select('id, respondido_por, encuesta_id, fecha_respuesta, paciente_nombre, areas_servicio(nombre)')
+      .select('id, respondido_por, encuesta_id, fecha_respuesta, created_at, paciente_nombre, areas_servicio(nombre)')
       .in('respondido_por', ids)
-      .order('fecha_respuesta', { ascending: false })
+      .order('created_at', { ascending: false })
     if (desde) q = q.gte('fecha_respuesta', desde)
     if (hasta) q = q.lte('fecha_respuesta', hasta)
     const { data: resp } = await q
@@ -84,7 +84,7 @@ export default function EstadoEncuestas() {
         lista.push({
           id: r.id,
           encuestaNombre: encuesta?.proveedor ?? encuesta?.nombre ?? `Encuesta #${r.encuesta_id}`,
-          fecha_respuesta: r.fecha_respuesta,
+          fechaHora: formatearFechaHora(r.created_at),
           detalle: r.paciente_nombre ?? (r.areas_servicio as unknown as { nombre: string } | null)?.nombre ?? null,
         })
         mapaRespuestas.set(r.respondido_por, lista)
@@ -234,7 +234,7 @@ export default function EstadoEncuestas() {
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 text-[10px] uppercase text-slate-400">
-                    <th className="px-3 py-2">Fecha</th>
+                    <th className="px-3 py-2">Fecha y hora</th>
                     <th className="px-3 py-2">Encuesta</th>
                     <th className="px-3 py-2">Paciente / área</th>
                   </tr>
@@ -242,7 +242,7 @@ export default function EstadoEncuestas() {
                 <tbody>
                   {popover.filas.map((f) => (
                     <tr key={f.id} className="border-b border-slate-100">
-                      <td className="whitespace-nowrap px-3 py-2 text-slate-600">{f.fecha_respuesta}</td>
+                      <td className="whitespace-nowrap px-3 py-2 text-slate-600">{f.fechaHora}</td>
                       <td className="px-3 py-2 text-slate-700">{f.encuestaNombre}</td>
                       <td className="px-3 py-2 text-slate-500">{f.detalle ?? '—'}</td>
                     </tr>
