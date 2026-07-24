@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
-import { PageHeader, Card, FilterBar, Input, Select, Boton, Badge } from '../components/ui'
+import { PageHeader, Card, FilterBar, Input, Select, Boton, Badge, calcularPosicionPopover } from '../components/ui'
 import { ROL_LABEL } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
@@ -11,18 +11,28 @@ type Profile = Database['public']['Tables']['profiles']['Row']
 type Item = { encuesta: Encuesta; diligenciada: boolean; cantidad: number; ultimaFecha: string | null }
 type Fila = { usuario: Profile; items: Item[]; totalRespuestas: number; pendientes: number }
 
+type RespuestaFila = {
+  id: number
+  encuestaNombre: string
+  fecha_respuesta: string
+  detalle: string | null
+}
+
+type PopoverUsuario = { x: number; y: number; usuario: string; filas: RespuestaFila[] } | null
+
 export default function EstadoEncuestas() {
   const [usuarios, setUsuarios] = useState<Profile[]>([])
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [asignaciones, setAsignaciones] = useState<Map<string, number[]>>(new Map())
   const [conteos, setConteos] = useState<Map<string, { cantidad: number; ultimaFecha: string }>>(new Map())
+  const [respuestasPorUsuario, setRespuestasPorUsuario] = useState<Map<string, RespuestaFila[]>>(new Map())
   const [totalRealizadas, setTotalRealizadas] = useState(0)
-  const [desgloseGlobal, setDesgloseGlobal] = useState<{ nombre: string; cantidad: number; ultimaFecha: string }[]>([])
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
   const [estado, setEstado] = useState<'todas' | 'diligenciadas' | 'pendientes'>('todas')
   const [busqueda, setBusqueda] = useState('')
   const [cargando, setCargando] = useState(true)
+  const [popover, setPopover] = useState<PopoverUsuario>(null)
 
   async function cargar() {
     setCargando(true)
@@ -47,11 +57,17 @@ export default function EstadoEncuestas() {
     setAsignaciones(mapaAsignaciones)
 
     const ids = (perfiles ?? []).map((u) => u.id)
-    let q = supabase.from('respuestas').select('respondido_por, encuesta_id, fecha_respuesta').in('respondido_por', ids)
+    let q = supabase
+      .from('respuestas')
+      .select('id, respondido_por, encuesta_id, fecha_respuesta, paciente_nombre, areas_servicio(nombre)')
+      .in('respondido_por', ids)
+      .order('fecha_respuesta', { ascending: false })
     if (desde) q = q.gte('fecha_respuesta', desde)
     if (hasta) q = q.lte('fecha_respuesta', hasta)
     const { data: resp } = await q
+
     const mapaConteos = new Map<string, { cantidad: number; ultimaFecha: string }>()
+    const mapaRespuestas = new Map<string, RespuestaFila[]>()
     for (const r of resp ?? []) {
       const clave = `${r.respondido_por}:${r.encuesta_id}`
       const actual = mapaConteos.get(clave)
@@ -61,28 +77,22 @@ export default function EstadoEncuestas() {
       } else {
         mapaConteos.set(clave, { cantidad: 1, ultimaFecha: r.fecha_respuesta })
       }
-    }
-    setConteos(mapaConteos)
-    setTotalRealizadas(resp?.length ?? 0)
 
-    const mapaPorEncuesta = new Map<number, { cantidad: number; ultimaFecha: string }>()
-    for (const r of resp ?? []) {
-      const actual = mapaPorEncuesta.get(r.encuesta_id)
-      if (actual) {
-        actual.cantidad++
-        if (r.fecha_respuesta > actual.ultimaFecha) actual.ultimaFecha = r.fecha_respuesta
-      } else {
-        mapaPorEncuesta.set(r.encuesta_id, { cantidad: 1, ultimaFecha: r.fecha_respuesta })
+      if (r.respondido_por) {
+        const encuesta = es.find((e) => e.id === r.encuesta_id)
+        const lista = mapaRespuestas.get(r.respondido_por) ?? []
+        lista.push({
+          id: r.id,
+          encuestaNombre: encuesta?.proveedor ?? encuesta?.nombre ?? `Encuesta #${r.encuesta_id}`,
+          fecha_respuesta: r.fecha_respuesta,
+          detalle: r.paciente_nombre ?? (r.areas_servicio as unknown as { nombre: string } | null)?.nombre ?? null,
+        })
+        mapaRespuestas.set(r.respondido_por, lista)
       }
     }
-    setDesgloseGlobal(
-      Array.from(mapaPorEncuesta.entries())
-        .map(([encuestaId, v]) => {
-          const encuesta = (es ?? []).find((e) => e.id === encuestaId)
-          return { nombre: encuesta?.proveedor ?? encuesta?.nombre ?? `Encuesta #${encuestaId}`, ...v }
-        })
-        .sort((a, b) => b.cantidad - a.cantidad),
-    )
+    setConteos(mapaConteos)
+    setRespuestasPorUsuario(mapaRespuestas)
+    setTotalRealizadas(resp?.length ?? 0)
     setCargando(false)
   }
 
@@ -117,37 +127,26 @@ export default function EstadoEncuestas() {
     return resultado
   }, [usuarios, encuestas, asignaciones, conteos, busqueda, estado])
 
+  function abrirPopoverUsuario(usuario: Profile, e: { clientX: number; clientY: number }) {
+    const filas = respuestasPorUsuario.get(usuario.id) ?? []
+    if (filas.length === 0) return
+    const { x, y } = calcularPosicionPopover(e)
+    setPopover({ x, y, usuario: usuario.nombre, filas })
+  }
+
   return (
     <div>
       <PageHeader
         titulo="Estado de encuestas por usuario"
         acciones={
-          <div className="group relative">
-            <Badge tono="verde">
-              {totalRealizadas} encuesta{totalRealizadas === 1 ? '' : 's'} realizada{totalRealizadas === 1 ? '' : 's'} en el
-              período
-            </Badge>
-            {desgloseGlobal.length > 0 && (
-              <div className="neu-flat invisible absolute right-0 top-full z-20 mt-2 w-72 p-0 opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
-                <div className="bg-[var(--azul)] px-3 py-2 text-xs font-bold text-white">Desglose por encuesta</div>
-                <div className="max-h-64 overflow-y-auto p-2">
-                  {desgloseGlobal.map((d) => (
-                    <div key={d.nombre} className="flex items-center justify-between gap-2 px-2 py-1 text-xs">
-                      <span className="text-slate-600">{d.nombre}</span>
-                      <span className="shrink-0 text-slate-400">
-                        {d.cantidad} · última {d.ultimaFecha}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          <Badge tono="verde">
+            {totalRealizadas} encuesta{totalRealizadas === 1 ? '' : 's'} realizada{totalRealizadas === 1 ? '' : 's'} en el período
+          </Badge>
         }
       />
       <p className="mb-4 text-sm text-slate-500">
         Encuestas asignadas a cada usuario: en verde las diligenciadas y en rojo las pendientes, según el período
-        filtrado. Pasa el mouse sobre una diligenciada para ver la fecha del último registro.
+        filtrado. Haz clic en "realizada(s)" para ver el detalle de esas encuestas.
       </p>
 
       <FilterBar>
@@ -185,9 +184,13 @@ export default function EstadoEncuestas() {
                   <span>
                     {usuario.nombre} <span className="text-xs font-normal text-slate-500">· {ROL_LABEL[usuario.role]}</span>
                   </span>
-                  <span className="rounded-full bg-emerald-600/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                  <button
+                    onClick={(e) => abrirPopoverUsuario(usuario, e)}
+                    disabled={totalRespuestas === 0}
+                    className="rounded-full bg-emerald-600/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 enabled:hover:bg-emerald-600/20 disabled:cursor-default"
+                  >
                     {totalRespuestas} realizada{totalRespuestas === 1 ? '' : 's'}
-                  </span>
+                  </button>
                   <span className="rounded-full bg-rose-600/10 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
                     {pendientes} encuesta{pendientes === 1 ? '' : 's'} sin diligenciar
                   </span>
@@ -211,6 +214,45 @@ export default function EstadoEncuestas() {
           </div>
         )}
       </Card>
+
+      {popover && (
+        <div className="fixed inset-0 z-40" onClick={() => setPopover(null)}>
+          <div
+            className="neu-flat fixed z-50 w-96 overflow-hidden p-0"
+            style={{ left: popover.x, top: popover.y }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-2 bg-[var(--azul)] px-3 py-2">
+              <span className="text-xs font-bold text-white">
+                {popover.usuario} · {popover.filas.length} encuesta{popover.filas.length === 1 ? '' : 's'}
+              </span>
+              <button onClick={() => setPopover(null)} className="text-white/70 hover:text-white">
+                ✕
+              </button>
+            </div>
+            <div className="max-h-80 overflow-y-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 text-[10px] uppercase text-slate-400">
+                    <th className="px-3 py-2">Fecha</th>
+                    <th className="px-3 py-2">Encuesta</th>
+                    <th className="px-3 py-2">Paciente / área</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {popover.filas.map((f) => (
+                    <tr key={f.id} className="border-b border-slate-100">
+                      <td className="whitespace-nowrap px-3 py-2 text-slate-600">{f.fecha_respuesta}</td>
+                      <td className="px-3 py-2 text-slate-700">{f.encuestaNombre}</td>
+                      <td className="px-3 py-2 text-slate-500">{f.detalle ?? '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
