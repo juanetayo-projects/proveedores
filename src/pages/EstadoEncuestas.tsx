@@ -17,6 +17,7 @@ export default function EstadoEncuestas() {
   const [asignaciones, setAsignaciones] = useState<Map<string, number[]>>(new Map())
   const [conteos, setConteos] = useState<Map<string, { cantidad: number; ultimaFecha: string }>>(new Map())
   const [totalRealizadas, setTotalRealizadas] = useState(0)
+  const [desgloseGlobal, setDesgloseGlobal] = useState<{ nombre: string; cantidad: number; ultimaFecha: string }[]>([])
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
   const [estado, setEstado] = useState<'todas' | 'diligenciadas' | 'pendientes'>('todas')
@@ -63,6 +64,25 @@ export default function EstadoEncuestas() {
     }
     setConteos(mapaConteos)
     setTotalRealizadas(resp?.length ?? 0)
+
+    const mapaPorEncuesta = new Map<number, { cantidad: number; ultimaFecha: string }>()
+    for (const r of resp ?? []) {
+      const actual = mapaPorEncuesta.get(r.encuesta_id)
+      if (actual) {
+        actual.cantidad++
+        if (r.fecha_respuesta > actual.ultimaFecha) actual.ultimaFecha = r.fecha_respuesta
+      } else {
+        mapaPorEncuesta.set(r.encuesta_id, { cantidad: 1, ultimaFecha: r.fecha_respuesta })
+      }
+    }
+    setDesgloseGlobal(
+      Array.from(mapaPorEncuesta.entries())
+        .map(([encuestaId, v]) => {
+          const encuesta = (es ?? []).find((e) => e.id === encuestaId)
+          return { nombre: encuesta?.proveedor ?? encuesta?.nombre ?? `Encuesta #${encuestaId}`, ...v }
+        })
+        .sort((a, b) => b.cantidad - a.cantidad),
+    )
     setCargando(false)
   }
 
@@ -102,9 +122,27 @@ export default function EstadoEncuestas() {
       <PageHeader
         titulo="Estado de encuestas por usuario"
         acciones={
-          <Badge tono="verde">
-            {totalRealizadas} encuesta{totalRealizadas === 1 ? '' : 's'} realizada{totalRealizadas === 1 ? '' : 's'} en el período
-          </Badge>
+          <div className="group relative">
+            <Badge tono="verde">
+              {totalRealizadas} encuesta{totalRealizadas === 1 ? '' : 's'} realizada{totalRealizadas === 1 ? '' : 's'} en el
+              período
+            </Badge>
+            {desgloseGlobal.length > 0 && (
+              <div className="neu-flat invisible absolute right-0 top-full z-20 mt-2 w-72 p-0 opacity-0 transition-opacity group-hover:visible group-hover:opacity-100">
+                <div className="bg-[var(--azul)] px-3 py-2 text-xs font-bold text-white">Desglose por encuesta</div>
+                <div className="max-h-64 overflow-y-auto p-2">
+                  {desgloseGlobal.map((d) => (
+                    <div key={d.nombre} className="flex items-center justify-between gap-2 px-2 py-1 text-xs">
+                      <span className="text-slate-600">{d.nombre}</span>
+                      <span className="shrink-0 text-slate-400">
+                        {d.cantidad} · última {d.ultimaFecha}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         }
       />
       <p className="mb-4 text-sm text-slate-500">

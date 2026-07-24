@@ -23,7 +23,9 @@ Deno.serve(async (req) => {
   if (!user) return json(401, { error: 'No autenticado' })
 
   const { data: perfil } = await admin.from('profiles').select('role').eq('id', user.id).single()
-  if (perfil?.role !== 'administrador') return json(403, { error: 'Solo el administrador puede gestionar usuarios' })
+  if (perfil?.role !== 'administrador' && perfil?.role !== 'coordinador_administrativo') {
+    return json(403, { error: 'Solo administrador o coordinador administrativo pueden gestionar usuarios' })
+  }
 
   const body = await req.json()
   const { accion } = body

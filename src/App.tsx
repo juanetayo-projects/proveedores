@@ -73,7 +73,7 @@ export default function App() {
           <Route
             path="/admin/usuarios"
             element={
-              <Guard roles={['administrador']}>
+              <Guard roles={['administrador', 'coordinador_administrativo']}>
                 <Usuarios />
               </Guard>
             }
@@ -81,7 +81,7 @@ export default function App() {
           <Route
             path="/admin/areas"
             element={
-              <Guard roles={['administrador']}>
+              <Guard roles={['administrador', 'coordinador_administrativo']}>
                 <Areas />
               </Guard>
             }

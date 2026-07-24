@@ -26,7 +26,6 @@ export default function Layout({ children }: { children: ReactNode }) {
   const [adminAbierto, setAdminAbierto] = useState(true)
   const [menuUsuarioAbierto, setMenuUsuarioAbierto] = useState(false)
 
-  const esAdmin = perfil?.role === 'administrador'
   const esCoordOAdmin = perfil?.role === 'administrador' || perfil?.role === 'coordinador_administrativo'
   const puedeResponder =
     perfil?.role === 'encuestado' ||
@@ -77,15 +76,13 @@ export default function Layout({ children }: { children: ReactNode }) {
           )}
         </div>
 
+        <div className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-[var(--azul-2)]">Opciones</div>
         <Item to="/">Dashboard</Item>
         {puedeResponder && <Item to="/diligenciar">Diligenciar encuesta</Item>}
-        {esCoordOAdmin && <Item to="/gestion">Gestión de encuesta</Item>}
-        {esCoordOAdmin && <Item to="/asignaciones">Asignaciones</Item>}
-        {esCoordOAdmin && <Item to="/estado-encuestas">Estado de encuestas</Item>}
         <Item to="/reportes">Reportes</Item>
         {esCoordOAdmin && <Item to="/panel-ejecutivo">Panel ejecutivo</Item>}
 
-        {esAdmin && (
+        {esCoordOAdmin && (
           <div className="mt-3">
             <button
               onClick={() => setAdminAbierto((v) => !v)}
@@ -95,8 +92,11 @@ export default function Layout({ children }: { children: ReactNode }) {
             </button>
             {adminAbierto && (
               <div className="flex flex-col gap-1">
+                <Item to="/gestion">Gestión de encuesta</Item>
+                <Item to="/asignaciones">Asignaciones</Item>
                 <Item to="/admin/usuarios">Usuarios</Item>
                 <Item to="/admin/areas">Áreas / servicio</Item>
+                <Item to="/estado-encuestas">Estado de encuestas</Item>
               </div>
             )}
           </div>
