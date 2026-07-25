@@ -330,6 +330,14 @@ export type Database = {
           categoria_area_id: number
         }[]
       }
+      panel_por_encuestador: {
+        Args: { p_desde?: string; p_encuesta_id: number; p_hasta?: string }
+        Returns: {
+          cantidad: number
+          nombre: string
+          profile_id: string
+        }[]
+      }
       panel_promedio_pregunta: {
         Args: { p_desde?: string; p_encuesta_id: number; p_hasta?: string }
         Returns: {

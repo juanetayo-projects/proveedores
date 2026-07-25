@@ -38,6 +38,7 @@ type DetalleFila = {
 
 type CategoriaFila = { categoria: string; categoriaAreaId: number | null; cantidad: number }
 type PreguntaProm = { pregunta_id: number; texto: string; orden: number; promedio: number | null; escalaMax: number }
+type EncuestadorFila = { profileId: string; nombre: string; cantidad: number }
 
 function AnilloSimple({
   pct,
@@ -216,6 +217,7 @@ export default function PanelEjecutivo() {
   const [porCategoria, setPorCategoria] = useState<CategoriaFila[]>([])
   const [conteoDiario, setConteoDiario] = useState<{ dia: string; cantidad: number }[]>([])
   const [promedioPregunta, setPromedioPregunta] = useState<PreguntaProm[]>([])
+  const [porEncuestador, setPorEncuestador] = useState<EncuestadorFila[]>([])
   const [popover, setPopover] = useState<PopoverState>(null)
   const cargaVigenteRef = useRef(0)
 
@@ -242,11 +244,12 @@ export default function PanelEjecutivo() {
     const miCarga = ++cargaVigenteRef.current
     setCargando(true)
     const params = { p_encuesta_id: encuestaId, p_desde: desde || undefined, p_hasta: hasta || undefined }
-    const [{ data: dist }, { data: cat }, { data: dia }, { data: prom }] = await Promise.all([
+    const [{ data: dist }, { data: cat }, { data: dia }, { data: prom }, { data: enc }] = await Promise.all([
       supabase.rpc('panel_distribucion', params),
       supabase.rpc('panel_por_categoria', params),
       supabase.rpc('panel_conteo_diario', params),
       supabase.rpc('panel_promedio_pregunta', params),
+      supabase.rpc('panel_por_encuestador', params),
     ])
     if (cargaVigenteRef.current !== miCarga) return
     setConteoValores(new Map((dist ?? []).map((d: any) => [String(d.valor), Number(d.cantidad)])))
@@ -267,6 +270,9 @@ export default function PanelEjecutivo() {
         escalaMax: Number(p.escala_max),
       })),
     )
+    setPorEncuestador(
+      (enc ?? []).map((e: any) => ({ profileId: e.profile_id, nombre: e.nombre, cantidad: Number(e.cantidad) })),
+    )
     setCargando(false)
   }
 
@@ -284,13 +290,17 @@ export default function PanelEjecutivo() {
   const positivos = distribucion.filter((d) => esPositivo(d.opcion)).reduce((acc, d) => acc + d.cantidad, 0)
   const pctSatisfaccion = total > 0 ? (positivos / total) * 100 : 0
 
-  async function cargarDetalle500(filtro: { valor?: string; categoria?: CategoriaFila }): Promise<DetalleFila[]> {
+  async function cargarDetalle500(filtro: {
+    valor?: string
+    categoria?: CategoriaFila
+    respondidoPor?: string
+  }): Promise<DetalleFila[]> {
     if (!encuestaId || !encuestaActual) return []
     const paciente = encuestaActual.tipo === 'paciente'
     let q = supabase
       .from('respuestas_detalle')
       .select(
-        `valor, preguntas!inner(texto, orden, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, paciente_nombre, identificador_evaluado, area_servicio_id, paciente_tipo_afiliacion, profiles(nombre), areas_servicio(nombre))`,
+        `valor, preguntas!inner(texto, orden, tipo_respuesta), respuestas!inner(fecha_respuesta, encuesta_id, respondido_por, paciente_nombre, identificador_evaluado, area_servicio_id, paciente_tipo_afiliacion, profiles(nombre), areas_servicio(nombre))`,
       )
       .eq('preguntas.tipo_respuesta', paciente ? 'escala_1_5' : 'escala_4')
       .eq('respuestas.encuesta_id', encuestaId)
@@ -303,6 +313,7 @@ export default function PanelEjecutivo() {
       else if (filtro.categoria.categoriaAreaId === null) q = q.is('respuestas.area_servicio_id', null)
       else q = q.eq('respuestas.area_servicio_id', filtro.categoria.categoriaAreaId)
     }
+    if (filtro.respondidoPor) q = q.eq('respuestas.respondido_por', filtro.respondidoPor)
     const { data } = await q
     return (data ?? [])
       .map((r: any) => ({
@@ -332,6 +343,14 @@ export default function PanelEjecutivo() {
     setPopover({ x, y, titulo: `${cat.categoria} (${cat.cantidad})`, filas: [], cargando: true })
     const filas = await cargarDetalle500({ categoria: cat })
     setPopover({ x, y, titulo: `${cat.categoria} (${cat.cantidad})`, filas, cargando: false })
+  }
+
+  async function abrirPopoverEncuestador(e: { clientX?: number; clientY?: number } | undefined, fila: EncuestadorFila) {
+    if (fila.cantidad === 0) return
+    const { x, y } = posicionPopover(e)
+    setPopover({ x, y, titulo: `${fila.nombre} (${fila.cantidad})`, filas: [], cargando: true })
+    const filas = await cargarDetalle500({ respondidoPor: fila.profileId })
+    setPopover({ x, y, titulo: `${fila.nombre} (${fila.cantidad})`, filas, cargando: false })
   }
 
   return (
@@ -503,6 +522,34 @@ export default function PanelEjecutivo() {
           <p className="mt-1 text-[10px] text-slate-400">% de satisfacción del período filtrado</p>
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <h2 className="mb-1 font-semibold text-[var(--azul)]">
+          Encuestas realizadas por {esPaciente ? 'orientador' : 'encuestado'}
+        </h2>
+        <p className="mb-4 text-[10px] text-slate-400">
+          Comparativo de volumen por persona en el período filtrado — útil para ver niveles de eficacia. Haz clic en
+          una barra para ver el detalle.
+        </p>
+        {porEncuestador.length > 0 ? (
+          <ResponsiveContainer width="100%" height={Math.max(160, porEncuestador.length * 32)}>
+            <BarChart data={porEncuestador} layout="vertical" margin={{ left: 40 }}>
+              <XAxis type="number" allowDecimals={false} />
+              <YAxis type="category" dataKey="nombre" width={160} tick={{ fontSize: 11 }} />
+              <RTooltip />
+              <Bar
+                dataKey="cantidad"
+                fill="#7e14ff"
+                radius={[0, 8, 8, 0]}
+                onClick={(data: any, _i, e) => abrirPopoverEncuestador(e, data)}
+                cursor="pointer"
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        ) : (
+          <p className="text-sm text-slate-500">Sin respuestas registradas con cuenta vinculada en este período.</p>
+        )}
+      </Card>
 
       <PopoverDetalle popover={popover} onClose={() => setPopover(null)} colorEscala={colorEscala} />
     </div>
