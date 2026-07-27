@@ -2,9 +2,15 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { supabase } from '../lib/supabase'
-import { listarAreas, listarEncuestasParaDiligenciar, listarPreguntas } from '../lib/data'
-import { PageHeader, Card, Boton, Input, Select, Textarea } from '../components/ui'
-import { ESCALA_4, ESCALA_4_COLOR, ESCALA_1_5, ESCALA_1_5_COLOR, ESCALA_1_5_LABEL, SI_NO } from '../lib/constantes'
+import {
+  encuestasYaDiligenciadas,
+  listarAreas,
+  listarEncuestasParaDiligenciar,
+  listarPreguntas,
+  tienePeriodoUnico,
+} from '../lib/data'
+import { PageHeader, Card, Boton, Input, Select, Textarea, Modal, Badge } from '../components/ui'
+import { ESCALA_4_CON_NA, ESCALA_4_COLOR, ESCALA_1_5, ESCALA_1_5_COLOR, ESCALA_1_5_LABEL, SI_NO } from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
 type Encuesta = Database['public']['Tables']['encuestas']['Row']
@@ -17,6 +23,8 @@ export default function DiligenciarEncuesta() {
   const [encuestas, setEncuestas] = useState<Encuesta[]>([])
   const [areas, setAreas] = useState<Area[]>([])
   const [seleccion, setSeleccion] = useState<Encuesta | null>(null)
+  const [yaDiligenciadas, setYaDiligenciadas] = useState<Set<number>>(new Set())
+  const [bloqueada, setBloqueada] = useState<Encuesta | null>(null)
   const [confirmarOtra, setConfirmarOtra] = useState<Encuesta | null>(null)
   const [preguntas, setPreguntas] = useState<Pregunta[]>([])
   const [respuestas, setRespuestas] = useState<Record<number, string>>({})
@@ -35,11 +43,25 @@ export default function DiligenciarEncuesta() {
 
   useEffect(() => {
     if (!perfil) return
-    listarEncuestasParaDiligenciar(perfil.id, perfil.role).then((es) => setEncuestas(es as Encuesta[]))
+    listarEncuestasParaDiligenciar(perfil.id, perfil.role).then(async (es) => {
+      const lista = es as Encuesta[]
+      setEncuestas(lista)
+      setYaDiligenciadas(await encuestasYaDiligenciadas(perfil.id, lista))
+    })
     listarAreas().then(setAreas)
   }, [perfil])
 
   async function elegir(e: Encuesta) {
+    // Segunda verificación contra la BD (el listado puede llevar rato abierto):
+    // la regla también la impone un trigger, esto es solo para avisar antes.
+    if (tienePeriodoUnico(e) && perfil) {
+      const ya = await encuestasYaDiligenciadas(perfil.id, [e])
+      if (ya.has(e.id)) {
+        setYaDiligenciadas((prev) => new Set(prev).add(e.id))
+        setBloqueada(e)
+        return
+      }
+    }
     setSeleccion(e)
     setOk(null)
     setErrorMsg(null)
@@ -97,36 +119,55 @@ export default function DiligenciarEncuesta() {
         if (errDetalle) throw errDetalle
       }
 
+      if (tienePeriodoUnico(seleccion)) {
+        setYaDiligenciadas((prev) => new Set(prev).add(seleccion.id))
+      }
       setOk('Encuesta registrada correctamente.')
       setConfirmarOtra(seleccion)
       setSeleccion(null)
       setPreguntas([])
     } catch (e) {
-      setErrorMsg(e instanceof Error ? e.message : 'No se pudo registrar la encuesta')
+      // El trigger `respuestas_una_por_periodo` rechaza el insert con 23505 si
+      // el usuario ya respondió esta encuesta dentro del período vigente.
+      if ((e as { code?: string })?.code === '23505') {
+        setYaDiligenciadas((prev) => new Set(prev).add(seleccion.id))
+        setBloqueada(seleccion)
+        setSeleccion(null)
+        setPreguntas([])
+      } else {
+        setErrorMsg(e instanceof Error ? e.message : 'No se pudo registrar la encuesta')
+      }
     } finally {
       setEnviando(false)
     }
   }
 
   if (confirmarOtra) {
+    // Las encuestas con período programado admiten una sola respuesta por
+    // usuario, así que ahí no se ofrece "diligenciar otra".
+    const unicaPorPeriodo = tienePeriodoUnico(confirmarOtra)
     return (
       <div>
         <PageHeader titulo="Diligenciar encuesta" />
         <Card className="flex flex-col items-center gap-4 py-10 text-center">
           <p className="font-medium text-emerald-700">{ok}</p>
           <p className="text-sm text-slate-600">
-            ¿Deseas diligenciar otra respuesta de "{confirmarOtra.nombre}"?
+            {unicaPorPeriodo
+              ? `Con esto queda registrada tu evaluación de "${confirmarOtra.nombre}" para el período actual.`
+              : `¿Deseas diligenciar otra respuesta de "${confirmarOtra.nombre}"?`}
           </p>
           <div className="flex gap-3">
-            <Boton
-              onClick={() => {
-                const e = confirmarOtra
-                setConfirmarOtra(null)
-                elegir(e)
-              }}
-            >
-              Sí, diligenciar otra
-            </Boton>
+            {!unicaPorPeriodo && (
+              <Boton
+                onClick={() => {
+                  const e = confirmarOtra
+                  setConfirmarOtra(null)
+                  elegir(e)
+                }}
+              >
+                Sí, diligenciar otra
+              </Boton>
+            )}
             <Boton
               variant="secundario"
               onClick={() => {
@@ -134,7 +175,7 @@ export default function DiligenciarEncuesta() {
                 navigate('/')
               }}
             >
-              No, volver al dashboard
+              {unicaPorPeriodo ? 'Volver al dashboard' : 'No, volver al dashboard'}
             </Boton>
           </div>
         </Card>
@@ -156,18 +197,25 @@ export default function DiligenciarEncuesta() {
                   new Date().toISOString().slice(0, 10) >= e.fecha_apertura &&
                   new Date().toISOString().slice(0, 10) <= e.fecha_cierre
                 )
+            const yaLaRespondio = yaDiligenciadas.has(e.id)
             return (
               <Card key={e.id}>
                 <div className="mb-1 font-semibold text-[var(--azul)]">{e.nombre}</div>
                 {e.proveedor && <div className="mb-2 text-xs text-slate-500">{e.proveedor}</div>}
-                <div className="mb-3 text-xs">
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-xs">
                   {abierta ? (
                     <span className="text-emerald-700">Abierta</span>
                   ) : (
                     <span className="text-rose-600">Cerrada</span>
                   )}
+                  {yaLaRespondio && <Badge tono="ambar">Ya diligenciada en este período</Badge>}
                 </div>
-                <Boton disabled={!abierta} onClick={() => elegir(e)} className="w-full">
+                <Boton
+                  disabled={!abierta}
+                  variant={yaLaRespondio ? 'secundario' : 'primario'}
+                  onClick={() => elegir(e)}
+                  className="w-full"
+                >
                   Diligenciar
                 </Boton>
               </Card>
@@ -177,6 +225,26 @@ export default function DiligenciarEncuesta() {
             <p className="text-sm text-slate-500">No tienes encuestas asignadas.</p>
           )}
         </div>
+
+        <Modal open={!!bloqueada} onClose={() => setBloqueada(null)} titulo="Encuesta ya diligenciada">
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-slate-600">
+              Ya registraste una encuesta de <strong>{bloqueada?.proveedor ?? bloqueada?.nombre}</strong> en el
+              período vigente
+              {bloqueada?.fecha_apertura && bloqueada?.fecha_cierre
+                ? ` (${bloqueada.fecha_apertura} al ${bloqueada.fecha_cierre})`
+                : ''}
+              .
+            </p>
+            <p className="text-sm text-slate-600">
+              Solo se permite una encuesta por proveedor en cada período. Podrás diligenciarla de nuevo cuando se
+              abra el siguiente período.
+            </p>
+            <div className="flex justify-end">
+              <Boton onClick={() => setBloqueada(null)}>Entendido</Boton>
+            </div>
+          </div>
+        </Modal>
       </div>
     )
   }
@@ -257,7 +325,7 @@ export default function DiligenciarEncuesta() {
             </label>
             {p.tipo_respuesta === 'escala_4' && (
               <div className="flex flex-wrap gap-2 pl-9">
-                {ESCALA_4.map((op) => {
+                {ESCALA_4_CON_NA.map((op) => {
                   const seleccionado = respuestas[p.id] === op
                   return (
                     <button

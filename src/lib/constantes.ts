@@ -1,10 +1,20 @@
 export const ESCALA_4 = ['Excelente', 'Bueno', 'Regular', 'Deficiente'] as const
 
+/** "No aplica" no es una calificación: se guarda como respuesta (deja constancia
+ * de que la pregunta no correspondía) pero se excluye de los indicadores —
+ * % de satisfacción y promedio por pregunta. Por eso va aparte de ESCALA_4,
+ * que es la escala evaluativa usada para agregar. */
+export const NO_APLICA = 'No aplica'
+
+/** Lo que ve quien responde: los 4 niveles + "No aplica". */
+export const ESCALA_4_CON_NA = [...ESCALA_4, NO_APLICA] as const
+
 export const ESCALA_4_COLOR: Record<string, string> = {
   Excelente: '#16a34a',
   Bueno: '#0d2d6b',
   Regular: '#d97706',
   Deficiente: '#dc2626',
+  [NO_APLICA]: '#64748b',
 }
 
 export const ESCALA_1_5 = ['1', '2', '3', '4', '5'] as const

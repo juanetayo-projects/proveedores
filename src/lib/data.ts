@@ -122,3 +122,49 @@ export async function estaEncuestaAbierta(encuesta: {
   const hoy = new Date().toISOString().slice(0, 10)
   return hoy >= encuesta.fecha_apertura && hoy <= encuesta.fecha_cierre
 }
+
+export type EncuestaPeriodo = {
+  id: number
+  siempre_abierta: boolean
+  fecha_apertura: string | null
+  fecha_cierre: string | null
+}
+
+/** Una encuesta admite una sola respuesta por usuario cuando tiene un período
+ * programado (apertura/cierre). Las marcadas "siempre abierta" —hoy solo
+ * Servicio de Alimentación, que el orientador aplica a muchos pacientes— no
+ * tienen período, así que no se limitan. */
+export function tienePeriodoUnico(encuesta: EncuestaPeriodo): boolean {
+  return !encuesta.siempre_abierta && !!encuesta.fecha_apertura && !!encuesta.fecha_cierre
+}
+
+/** Ids de las encuestas que este usuario ya diligenció dentro del período
+ * vigente de cada una. Una sola consulta para todas: se filtra por la apertura
+ * más antigua y el corte por encuesta se hace en memoria (son pocas filas,
+ * a lo sumo una por encuesta y período). */
+export async function encuestasYaDiligenciadas(
+  profileId: string,
+  encuestas: EncuestaPeriodo[],
+): Promise<Set<number>> {
+  const conPeriodo = encuestas.filter(tienePeriodoUnico)
+  if (conPeriodo.length === 0) return new Set()
+  const aperturaMinima = conPeriodo
+    .map((e) => e.fecha_apertura as string)
+    .reduce((a, b) => (a < b ? a : b))
+  const { data, error } = await supabase
+    .from('respuestas')
+    .select('encuesta_id, fecha_respuesta')
+    .eq('respondido_por', profileId)
+    .in('encuesta_id', conPeriodo.map((e) => e.id))
+    .gte('fecha_respuesta', aperturaMinima)
+  if (error) throw error
+  const porId = new Map(conPeriodo.map((e) => [e.id, e]))
+  const ya = new Set<number>()
+  for (const r of data ?? []) {
+    const e = porId.get(r.encuesta_id)
+    if (e && r.fecha_respuesta >= e.fecha_apertura! && r.fecha_respuesta <= e.fecha_cierre!) {
+      ya.add(r.encuesta_id)
+    }
+  }
+  return ya
+}

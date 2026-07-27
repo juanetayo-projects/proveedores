@@ -3,7 +3,14 @@ import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip as RTooltip, Resp
 import { supabase } from '../lib/supabase'
 import { listarEncuestas } from '../lib/data'
 import { PageHeader, Card, FilterBar, Select, Input, Boton } from '../components/ui'
-import { ESCALA_4, ESCALA_4_COLOR, ESCALA_1_5, ESCALA_1_5_COLOR, ESCALA_1_5_LABEL } from '../lib/constantes'
+import {
+  ESCALA_4_CON_NA,
+  ESCALA_4_COLOR,
+  ESCALA_1_5,
+  ESCALA_1_5_COLOR,
+  ESCALA_1_5_LABEL,
+  NO_APLICA,
+} from '../lib/constantes'
 import type { Database } from '../lib/database.types'
 
 type Encuesta = Database['public']['Tables']['encuestas']['Row']
@@ -13,6 +20,7 @@ const DESCRIPCION_ESCALA_4: Record<string, string> = {
   Bueno: 'Cumple lo esperado',
   Regular: 'Cumple parcialmente',
   Deficiente: 'No cumple lo esperado',
+  [NO_APLICA]: 'No corresponde — no cuenta para los indicadores',
 }
 
 function primerDiaDelMes(): string {
@@ -230,7 +238,7 @@ export default function PanelEjecutivo() {
 
   const encuestaActual = encuestas.find((e) => e.id === encuestaId)
   const esPaciente = encuestaActual?.tipo === 'paciente'
-  const opcionesEscala: readonly string[] = esPaciente ? ESCALA_1_5 : ESCALA_4
+  const opcionesEscala: readonly string[] = esPaciente ? ESCALA_1_5 : ESCALA_4_CON_NA
   const colorEscala: Record<string, string> = esPaciente ? ESCALA_1_5_COLOR : ESCALA_4_COLOR
   const esPositivo = (valor: string) => (esPaciente ? Number(valor) >= 4 : valor === 'Excelente' || valor === 'Bueno')
 
@@ -286,8 +294,12 @@ export default function PanelEjecutivo() {
     () => opcionesEscala.map((op) => ({ opcion: op, cantidad: conteoValores.get(op) ?? 0 })),
     [conteoValores, opcionesEscala],
   )
-  const total = distribucion.reduce((acc, d) => acc + d.cantidad, 0)
-  const positivos = distribucion.filter((d) => esPositivo(d.opcion)).reduce((acc, d) => acc + d.cantidad, 0)
+  // "No aplica" se muestra en la distribución (deja ver cuánto se marcó) pero
+  // no entra en el denominador del % de satisfacción: no es una calificación.
+  const calificadas = distribucion.filter((d) => d.opcion !== NO_APLICA)
+  const total = calificadas.reduce((acc, d) => acc + d.cantidad, 0)
+  const noAplica = conteoValores.get(NO_APLICA) ?? 0
+  const positivos = calificadas.filter((d) => esPositivo(d.opcion)).reduce((acc, d) => acc + d.cantidad, 0)
   const pctSatisfaccion = total > 0 ? (positivos / total) * 100 : 0
 
   async function cargarDetalle500(filtro: {
@@ -396,6 +408,12 @@ export default function PanelEjecutivo() {
               {positivos} de {total}
             </strong>{' '}
             respuestas cuentan como positivas.
+            {!esPaciente && noAplica > 0 && (
+              <>
+                <br />
+                {noAplica} marcada(s) como "No aplica" quedan fuera del cálculo.
+              </>
+            )}
           </p>
         </Card>
 
@@ -413,7 +431,7 @@ export default function PanelEjecutivo() {
                 <div
                   className="w-9 rounded-t-lg"
                   style={{
-                    height: Math.max(6, (d.cantidad / Math.max(1, total)) * 120),
+                    height: Math.max(6, (d.cantidad / Math.max(1, total + noAplica)) * 120),
                     background: colorEscala[d.opcion],
                   }}
                 />
@@ -421,7 +439,7 @@ export default function PanelEjecutivo() {
                 <span className="text-xs text-slate-400">{d.cantidad}</span>
               </button>
             ))}
-            {total === 0 && <p className="text-sm text-slate-500">Sin respuestas todavía.</p>}
+            {total + noAplica === 0 && <p className="text-sm text-slate-500">Sin respuestas todavía.</p>}
           </div>
           <div className="mt-4 flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 pt-3">
             {opcionesEscala.map((op) => (
