@@ -275,10 +275,11 @@ export default function GestionEncuesta() {
                     onChange={(e) => setFormPregunta({ ...formPregunta, tipo_respuesta: e.target.value })}
                     className="w-auto"
                   >
-                    <option value="escala_4">Excelente/Bueno/Regular/Deficiente</option>
-                    <option value="escala_1_5">Escala 1 a 5</option>
-                    <option value="si_no">Sí / No</option>
-                    <option value="texto_libre">Texto libre</option>
+                    {Object.entries(TIPO_RESPUESTA_LABEL).map(([valor, etiqueta]) => (
+                      <option key={valor} value={valor}>
+                        {etiqueta}
+                      </option>
+                    ))}
                   </Select>
                   <label className="flex items-center gap-1 text-xs">
                     <input
@@ -323,10 +324,11 @@ export default function GestionEncuesta() {
             className="flex-1"
           />
           <Select value={tipoNuevaPregunta} onChange={(e) => setTipoNuevaPregunta(e.target.value)} className="w-auto">
-            <option value="escala_4">Excelente/Bueno/Regular/Deficiente</option>
-            <option value="escala_1_5">Escala 1 a 5</option>
-            <option value="si_no">Sí / No</option>
-            <option value="texto_libre">Texto libre</option>
+            {Object.entries(TIPO_RESPUESTA_LABEL).map(([valor, etiqueta]) => (
+              <option key={valor} value={valor}>
+                {etiqueta}
+              </option>
+            ))}
           </Select>
           <Boton onClick={agregarPregunta}>Agregar</Boton>
         </div>

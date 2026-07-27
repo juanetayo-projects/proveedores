@@ -188,7 +188,7 @@ export default function Dashboard() {
         <MetricCard
           titulo="Calificación proveedores"
           valor={promedioProveedores ? `${promedioProveedores.toFixed(2)} / 4` : '—'}
-          sub="Excelente=4 · Deficiente=1"
+          sub="Excelente=4 · Deficiente=1 · No aplica no promedia"
         />
         <MetricCard titulo="Respuestas Alimentación" valor={conteoAlimentacion} />
       </div>

@@ -44,9 +44,12 @@ export const ROL_LABEL: Record<string, string> = {
   orientador: 'Orientador',
 }
 
+/** Orden con el que se listan los tipos de respuesta al crear/editar una
+ * pregunta en Gestión de encuesta — `escala_4` primero, que es el predeterminado.
+ * Es la única fuente de esas etiquetas: no repetir los <option> a mano. */
 export const TIPO_RESPUESTA_LABEL: Record<string, string> = {
+  escala_4: ESCALA_4_CON_NA.join(' / '),
   escala_1_5: 'Escala 1 a 5',
-  escala_4: 'Excelente / Bueno / Regular / Deficiente',
   si_no: 'Sí / No',
   texto_libre: 'Texto libre',
 }
