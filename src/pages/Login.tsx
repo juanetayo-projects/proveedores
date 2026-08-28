@@ -45,14 +45,14 @@ export default function Login() {
     const email = await resolverEmail(usuario)
     if (!email) {
       setCargando(false)
-      setMsg('No se pudo enviar el correo')
+      setMsg('Usuario no encontrado')
       return
     }
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}${import.meta.env.BASE_URL}#/reset`,
     })
     setCargando(false)
-    setMsg(error ? 'No se pudo enviar el correo' : 'Revisa tu correo para continuar')
+    setMsg(error ? 'No se pudo enviar el correo. Intenta de nuevo en unos minutos.' : 'Revisa tu correo para continuar')
   }
 
   return (
